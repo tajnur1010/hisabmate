@@ -1,0 +1,203 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   HisabMate design tokens
+   Identity: "Jade · Midnight · Coin-gold"
+   Values are space-separated RGB channels so Tailwind can apply
+   alpha via rgb(var(--token) / <alpha-value>).
+   ============================================================ */
+@layer base {
+  :root {
+    color-scheme: light;
+
+    --bg: 245 247 246;
+    --surface: 255 255 255;
+    --surface-2: 238 241 239;
+    --elevated: 255 255 255;
+
+    --ink: 12 26 22;
+    --muted: 91 107 101;
+    --faint: 147 161 155;
+    --line: 226 231 228;
+
+    --brand: 13 159 110;
+    --brand-fg: 255 255 255;
+    --brand-soft: 226 245 237;
+    --brand-strong: 10 125 87;
+
+    --gold: 214 145 20;
+    --gold-soft: 253 240 217;
+
+    --positive: 18 161 80;
+    --positive-soft: 226 244 233;
+
+    --warning: 201 132 12;
+    --warning-soft: 253 243 225;
+
+    --danger: 214 60 66;
+    --danger-soft: 252 233 233;
+
+    --ring: var(--brand);
+  }
+
+  .dark {
+    color-scheme: dark;
+
+    --bg: 10 21 18;
+    --surface: 17 28 25;
+    --surface-2: 22 36 31;
+    --elevated: 26 42 36;
+
+    --ink: 234 242 238;
+    --muted: 157 176 168;
+    --faint: 107 126 119;
+    --line: 36 53 48;
+
+    --brand: 21 184 132;
+    --brand-fg: 4 20 14;
+    --brand-soft: 14 42 34;
+    --brand-strong: 15 165 116;
+
+    --gold: 245 185 66;
+    --gold-soft: 42 36 20;
+
+    --positive: 61 208 127;
+    --positive-soft: 18 48 31;
+
+    --warning: 245 179 63;
+    --warning-soft: 46 39 18;
+
+    --danger: 240 101 106;
+    --danger-soft: 51 26 27;
+
+    --ring: var(--brand);
+  }
+
+  * {
+    border-color: rgb(var(--line));
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-bg text-ink font-sans antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    overscroll-behavior-y: none;
+  }
+
+  /* Bangla-first typography when the interface language is Bangla. */
+  html:lang(bn) body {
+    @apply font-bangla;
+  }
+
+  /* Numbers always render in the display face with tabular figures,
+     regardless of language, for aligned ledger columns. */
+  .tabular {
+    font-family: theme('fontFamily.num');
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  h1, h2, h3, h4 {
+    @apply font-display tracking-tight text-ink;
+  }
+
+  ::selection {
+    background: rgb(var(--brand) / 0.22);
+  }
+
+  /* Focus visibility — part of the quality floor. */
+  :focus-visible {
+    outline: 2px solid rgb(var(--ring));
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-surface border border-line rounded-card shadow-soft;
+  }
+
+  .card-lifted {
+    @apply bg-surface border border-line rounded-card shadow-card;
+  }
+
+  /* Ledger spine — the signature status edge on cards & rows. */
+  .spine {
+    position: relative;
+    overflow: hidden;
+  }
+  .spine::before {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+    border-radius: 999px;
+    background: rgb(var(--line));
+  }
+  .spine-positive::before { background: rgb(var(--positive)); }
+  .spine-warning::before { background: rgb(var(--warning)); }
+  .spine-danger::before { background: rgb(var(--danger)); }
+  .spine-brand::before { background: rgb(var(--brand)); }
+
+  .input-base {
+    @apply w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-[15px] text-ink
+           placeholder:text-faint transition-colors duration-150
+           focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/15
+           disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .skeleton {
+    @apply relative overflow-hidden rounded-lg bg-surface-2;
+  }
+  .skeleton::after {
+    content: '';
+    @apply absolute inset-0 -translate-x-full animate-shimmer;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(var(--ink) / 0.06),
+      transparent
+    );
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+  .pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 0px); }
+  .pt-safe { padding-top: max(env(safe-area-inset-top), 0px); }
+  .bottom-safe { bottom: max(env(safe-area-inset-bottom), 0px); }
+
+  .grid-auto-fill-cards {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+  }
+}
+
+/* Refined scrollbars on desktop. */
+@media (pointer: fine) {
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--line));
+    border-radius: 999px;
+    border: 3px solid rgb(var(--bg));
+  }
+  ::-webkit-scrollbar-thumb:hover { background: rgb(var(--faint)); }
+}

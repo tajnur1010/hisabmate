@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="bn">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>HisabMate — Offline</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f4f7f5;
+        --card: #ffffff;
+        --ink: #0f1f1a;
+        --muted: #5b6b64;
+        --brand: #0d9f6e;
+        --brand-strong: #0a8659;
+        --gold: #dfa636;
+        --line: #e4ebe7;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0b1512;
+          --card: #10201b;
+          --ink: #eef4f1;
+          --muted: #93a49c;
+          --brand: #17b881;
+          --brand-strong: #0d9f6e;
+          --gold: #f0c25a;
+          --line: #1e2f28;
+        }
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        min-height: 100dvh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Hind Siliguri", sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      .card {
+        width: 100%;
+        max-width: 380px;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        padding: 36px 28px 30px;
+        text-align: center;
+        box-shadow: 0 20px 50px -30px rgba(0, 0, 0, 0.45);
+      }
+      .mark {
+        width: 68px;
+        height: 68px;
+        margin: 0 auto 22px;
+        display: grid;
+        place-items: center;
+        border-radius: 20px;
+        background: linear-gradient(160deg, #14a97c, #0a8659);
+        color: #fff;
+        box-shadow: 0 14px 30px -14px rgba(13, 159, 110, 0.7);
+      }
+      h1 { margin: 0 0 6px; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+      .en { margin: 0 0 18px; font-size: 14px; color: var(--muted); }
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin: 2px 0 22px;
+        padding: 7px 14px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--gold) 16%, transparent);
+        color: var(--gold);
+        font-size: 12.5px;
+        font-weight: 600;
+      }
+      .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+      .note { margin: 0 0 22px; font-size: 13px; line-height: 1.6; color: var(--muted); }
+      button {
+        width: 100%;
+        border: 0;
+        border-radius: 16px;
+        padding: 14px;
+        font-size: 15px;
+        font-weight: 700;
+        color: #fff;
+        background: var(--brand);
+        cursor: pointer;
+        transition: transform 0.12s ease, background 0.2s ease;
+        font-family: inherit;
+      }
+      button:hover { background: var(--brand-strong); }
+      button:active { transform: scale(0.98); }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <div class="mark" aria-hidden="true">
+        <svg width="34" height="34" viewBox="0 0 32 32" fill="none">
+          <path d="M7 8.5C7 7.67 7.67 7 8.5 7H23.5C24.33 7 25 7.67 25 8.5V25L21 22.5L18 25L15 22.5L12 25L9 22.5L7 24V8.5Z" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+          <path d="M11.5 12.5H20.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <path d="M11.5 16.5H17" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+        </svg>
+      </div>
+
+      <h1>আপনি অফলাইনে আছেন</h1>
+      <p class="en">You're offline</p>
+
+      <div class="status"><span class="dot"></span><span id="conn">সংযোগের অপেক্ষায়…</span></div>
+
+      <p class="note">
+        চিন্তা নেই — আপনার হিসাব এই ডিভাইসেই নিরাপদে সংরক্ষিত আছে। ইন্টারনেট ফিরে এলে সব আপনাআপনি সিঙ্ক হয়ে যাবে।<br />
+        <span style="opacity:0.75">Your ledger is saved safely on this device and will sync automatically when you're back online.</span>
+      </p>
+
+      <button id="retry" type="button">আবার চেষ্টা করুন / Try again</button>
+    </main>
+
+    <script>
+      (function () {
+        var conn = document.getElementById('conn');
+        function reload() { window.location.reload(); }
+        document.getElementById('retry').addEventListener('click', reload);
+        // Auto-recover the moment connectivity returns.
+        window.addEventListener('online', reload);
+        function paint() {
+          if (navigator.onLine) {
+            conn.textContent = 'সংযোগ ফিরেছে — লোড হচ্ছে…';
+            reload();
+          }
+        }
+        paint();
+      })();
+    </script>
+  </body>
+</html>

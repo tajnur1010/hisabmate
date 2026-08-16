@@ -1,0 +1,24 @@
+// Barrel export for HisabMate UI primitives.
+export { Button, IconButton } from './Button';
+export type { ButtonProps } from './Button';
+export { Card } from './Card';
+export type { CardProps } from './Card';
+export { Input } from './Input';
+export type { InputProps } from './Input';
+export { Textarea } from './Textarea';
+export { Select } from './Select';
+export type { SelectOption } from './Select';
+export { Badge } from './Badge';
+export type { Tone } from './Badge';
+export { StatusPill } from './StatusPill';
+export { Avatar } from './Avatar';
+export { MoneyText } from './MoneyText';
+export { Skeleton, SkeletonText } from './Skeleton';
+export { EmptyState } from './EmptyState';
+export { SegmentedControl } from './SegmentedControl';
+export type { SegmentedOption } from './SegmentedControl';
+export { Sheet } from './Sheet';
+export { Dialog, ConfirmDialog } from './Dialog';
+export { SearchInput } from './SearchInput';
+export { Switch } from './Switch';
+export { Spinner } from './Spinner';

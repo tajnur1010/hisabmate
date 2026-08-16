@@ -1,0 +1,23 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="HisabMate">
+  <defs>
+    <linearGradient id="jade" x1="0" y1="0" x2="0" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#14A97C"/>
+      <stop offset="1" stop-color="#0A8659"/>
+    </linearGradient>
+    <linearGradient id="coin" x1="302" y1="302" x2="410" y2="410" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F7CE62"/>
+      <stop offset="1" stop-color="#DFA636"/>
+    </linearGradient>
+  </defs>
+  <!-- Full-bleed jade: the platform applies its own mask (circle/squircle). -->
+  <rect width="512" height="512" fill="url(#jade)"/>
+  <!-- Foreground kept inside the central ~80% maskable safe zone. -->
+  <g transform="translate(256,256) scale(0.8) translate(-256,-256)">
+    <circle cx="356" cy="356" r="54" fill="url(#coin)"/>
+    <g transform="translate(32,32) scale(14)">
+      <path d="M7 8.5C7 7.67 7.67 7 8.5 7H23.5C24.33 7 25 7.67 25 8.5V25L21 22.5L18 25L15 22.5L12 25L9 22.5L7 24V8.5Z" fill="#FFFFFF"/>
+      <path d="M11.5 12.5H20.5" stroke="#0D9F6E" stroke-width="2.2" stroke-linecap="round"/>
+      <path d="M11.5 16.5H17" stroke="#0D9F6E" stroke-width="2.2" stroke-linecap="round"/>
+    </g>
+  </g>
+</svg>
