@@ -10,6 +10,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { env } from '@/lib/env';
 import type { TranslationKey } from '@/i18n/en';
 import { validateName } from '@/utils/validation';
+import { errorMessage } from '@/utils/errorMessage';
 import { Button, Input, SegmentedControl } from '@/components/ui';
 import { CenteredScreen } from '@/components/layout/CenteredScreen';
 import { LedgerMark } from '@/components/Splash';
@@ -53,7 +54,9 @@ export default function Onboarding() {
       setLang(language);
       navigate('/', { replace: true });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('error.saveFailed'));
+      // Surface the real reason (Supabase errors aren't Error instances).
+      console.error('createBusiness failed:', err);
+      toast.error(errorMessage(err, t('error.saveFailed')));
       setSubmitting(false);
     }
   }
