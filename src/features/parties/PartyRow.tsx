@@ -22,11 +22,11 @@ export function PartyRow({ party }: { party: PartyWithBalance }) {
     <button
       type="button"
       onClick={() => navigate(`${base}/${party.id}`)}
-      className="card flex w-full items-center gap-3 p-3 text-left transition-transform duration-150 active:scale-[0.99]"
+      className="card flex w-full items-center gap-2.5 p-3 text-left transition-transform duration-150 active:scale-[0.99]"
     >
-      <Avatar name={party.name} photoUrl={party.photoUrl} />
+      <Avatar name={party.name} photoUrl={party.photoUrl} size="sm" />
       <div className="min-w-0 flex-1">
-        <span className="block truncate font-semibold text-ink">{party.name}</span>
+        <span className="block truncate text-sm font-semibold text-ink">{party.name}</span>
         <span className="mt-0.5 block truncate text-xs text-faint">{sub}</span>
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1">

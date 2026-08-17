@@ -178,15 +178,15 @@ function QuickTile({
     <button
       type="button"
       onClick={onClick}
-      className="flex flex-col items-center gap-2 rounded-3xl border border-line bg-elevated py-3.5 text-center transition-transform active:scale-95"
+      className="flex flex-col items-center gap-1.5 rounded-2xl border border-line bg-elevated py-3 text-center transition-transform active:scale-95"
     >
       <span
         className={cn(
-          'grid h-10 w-10 place-items-center rounded-2xl',
+          'grid h-7 w-7 place-items-center rounded-xl',
           tone ? cn(tone.soft, tone.text) : 'bg-brand-soft text-brand-strong',
         )}
       >
-        <Icon size={16} />
+        <Icon size={14} />
       </span>
       <span className="text-[11px] font-medium leading-tight text-ink">{label}</span>
     </button>
