@@ -47,7 +47,7 @@ export default function Dashboard() {
     <div className="space-y-5 px-4 py-4">
       <header>
         <p className="text-sm text-muted">{greeting}</p>
-        <h1 className="font-display text-2xl font-semibold text-ink">
+        <h1 className="font-display text-base font-semibold text-ink">
           {business?.ownerName || business?.name || t('app.name')}
         </h1>
       </header>
@@ -186,7 +186,7 @@ function QuickTile({
           tone ? cn(tone.soft, tone.text) : 'bg-brand-soft text-brand-strong',
         )}
       >
-        <Icon size={19} />
+        <Icon size={16} />
       </span>
       <span className="text-[11px] font-medium leading-tight text-ink">{label}</span>
     </button>

@@ -35,6 +35,9 @@ export const bn: Partial<TranslationDict> = {
   'common.demoBanner': 'আপনি ডেমো ডেটা দেখছেন — এটি শুধু এই ডিভাইসে সংরক্ষিত।',
   'common.saving': 'সংরক্ষণ হচ্ছে…',
   'common.of': '/',
+  'common.total': 'মোট',
+  'common.download': 'ডাউনলোড',
+  'common.filter': 'ফিল্টার',
 
   'nav.dashboard': 'হোম',
   'nav.customers': 'কাস্টমার',

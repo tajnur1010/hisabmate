@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useI18n } from '@/contexts/I18nContext';
@@ -19,8 +19,6 @@ export default function Login() {
   const { signIn, signInWithGoogle } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
-  const location = useLocation();
-  const from = (location.state as { from?: string } | null)?.from ?? '/';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -47,13 +45,13 @@ export default function Login() {
       toast.error(res.error ?? t('error.generic'));
       return;
     }
-    navigate(from, { replace: true });
+    navigate('/', { replace: true });
   }
 
   async function onGoogle() {
     const res = await signInWithGoogle();
     if (!res.ok) toast.error(res.error ?? t('error.generic'));
-    else if (isMockBackend) navigate(from, { replace: true });
+    else if (isMockBackend) navigate('/', { replace: true });
   }
 
   return (

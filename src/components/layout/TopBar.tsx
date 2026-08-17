@@ -85,14 +85,14 @@ export function TopBar({ className }: { className?: string }) {
           label={t('common.search')}
           onClick={() => navigate('/search')}
         >
-          <Search size={20} />
+          <Search size={18} />
         </IconButton>
         <IconButton
           size="sm"
           label={t('nav.settings')}
           onClick={() => navigate('/settings')}
         >
-          <Settings size={20} />
+          <Settings size={18} />
         </IconButton>
       </div>
     </header>

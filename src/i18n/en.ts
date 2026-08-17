@@ -33,6 +33,9 @@ export const en = {
   'common.demoBanner': 'You’re viewing demo data stored only on this device.',
   'common.saving': 'Saving…',
   'common.of': 'of',
+  'common.total': 'Total',
+  'common.download': 'Download',
+  'common.filter': 'Filter',
 
   'nav.dashboard': 'Home',
   'nav.customers': 'Customers',
