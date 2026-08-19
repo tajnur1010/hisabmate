@@ -137,17 +137,16 @@ export default function PartyProfile() {
 
   return (
     <div className="pb-10">
-      {/* Contextual sub-header (back / edit / delete) */}
-      <div className="sticky top-0 z-10 flex items-center gap-1 border-b border-line/70 bg-surface/95 px-2 py-2 backdrop-blur supports-[backdrop-filter]:bg-surface/80">
+      {/* Slim action bar — the profile's only header (the global TopBar is
+          hidden on detail routes). Back / edit / delete live here and nothing
+          else; the party's name sits in the profile card below, not here, so we
+          never stack two name-bearing headers. pt-safe clears the notch now that
+          the TopBar (which owned that padding) is gone. */}
+      <div className="sticky top-0 z-10 flex items-center gap-1 border-b border-line/70 bg-surface/95 px-2 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur supports-[backdrop-filter]:bg-surface/80">
         <IconButton size="sm" label={t('common.back')} onClick={() => navigate(base)}>
           <ArrowLeft size={20} />
         </IconButton>
-        <div className="min-w-0 flex-1 px-1">
-          <p className="truncate font-semibold leading-tight text-ink">{party.name}</p>
-          <p className="truncate text-[11px] leading-tight text-faint">
-            {isCustomer ? t('party.customers') : t('party.suppliers')}
-          </p>
-        </div>
+        <span className="flex-1" />
         <IconButton size="sm" label={t('common.edit')} onClick={() => setEditing(true)}>
           <Pencil size={18} />
         </IconButton>
@@ -156,10 +155,18 @@ export default function PartyProfile() {
         </IconButton>
       </div>
 
-      <div className="space-y-5 px-4 py-4">
-        {/* Hero balance */}
+      <div className="space-y-4 px-4 pb-4 pt-6">
+        {/* Profile card — identity + live balance, centered as the page's focal
+            point and offset from the top so it reads as starting mid-screen.
+            The name lives here (and only here) so the action bar stays clean. */}
         <Card elevated spine="brand" className="flex flex-col items-center gap-2 py-6 text-center">
-          <Avatar name={party.name} photoUrl={party.photoUrl} size="xl" />
+          <Avatar name={party.name} photoUrl={party.photoUrl} size="lg" />
+          <div className="space-y-0.5">
+            <p className="font-display text-lg font-semibold leading-tight text-ink">{party.name}</p>
+            <p className="text-xs text-faint">
+              {isCustomer ? t('party.customers') : t('party.suppliers')}
+            </p>
+          </div>
           <p className="mt-1 text-sm text-muted">{t(view.labelKey)}</p>
           {view.settled ? (
             <span className="font-display text-2xl font-semibold text-faint">{t('party.settled')}</span>

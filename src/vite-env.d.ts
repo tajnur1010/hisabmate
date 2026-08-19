@@ -8,6 +8,8 @@ interface ImportMetaEnv {
   readonly VITE_ENABLE_GOOGLE_AUTH?: string;
   readonly VITE_DEFAULT_LANG?: 'bn' | 'en';
   readonly VITE_DEFAULT_CURRENCY?: string;
+  /** Deployed https site — used by the packaged app for email-link redirects. */
+  readonly VITE_PUBLIC_URL?: string;
 }
 
 interface ImportMeta {

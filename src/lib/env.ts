@@ -12,6 +12,12 @@ export const env = {
   enableGoogleAuth: import.meta.env.VITE_ENABLE_GOOGLE_AUTH === 'true',
   defaultLang: (import.meta.env.VITE_DEFAULT_LANG ?? 'bn') as Language,
   defaultCurrency: import.meta.env.VITE_DEFAULT_CURRENCY ?? '৳',
+  /**
+   * The deployed https site. Only used by the packaged Android app, whose own
+   * origin (http://localhost) cannot be opened from an email link — see
+   * src/lib/native.ts.
+   */
+  publicUrl: import.meta.env.VITE_PUBLIC_URL ?? '',
 };
 
 /** True only when a real Supabase backend is configured with credentials. */

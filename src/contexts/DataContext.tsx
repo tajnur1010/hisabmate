@@ -11,10 +11,18 @@ import type { ReactNode } from 'react';
 import type {
   Business,
   Expense,
+  InventorySummary,
   Party,
   PartyType,
   PartyWithBalance,
+  Product,
+  ProductCategory,
+  ProductProfit,
+  ProductWithStock,
   Reminder,
+  ReportRange,
+  StockLedgerRow,
+  StockMovement,
   Transaction,
 } from '@/types';
 import { getAdapter } from '@/services';
@@ -22,7 +30,10 @@ import type {
   CreateBusinessInput,
   CreateExpenseInput,
   CreatePartyInput,
+  CreateProductCategoryInput,
+  CreateProductInput,
   CreateReminderInput,
+  CreateStockMovementInput,
   CreateTransactionInput,
 } from '@/services/adapter';
 import {
@@ -31,6 +42,15 @@ import {
   groupTransactionsByParty,
   withBalances,
 } from '@/services/ledger';
+import {
+  computeProductProfit,
+  computeStockLedgerRows,
+  findByCode,
+  groupMovementsByProduct,
+  lowStockAlerts,
+  summarizeInventory,
+  withStock,
+} from '@/services/inventory';
 import { useAuth } from './AuthContext';
 import { useSettings } from './SettingsContext';
 
@@ -52,6 +72,16 @@ interface DataContextValue {
   transactions: Transaction[];
   expenses: Expense[];
   txnsByParty: Map<string, Transaction[]>;
+
+  /* Products & inventory */
+  productCategories: ProductCategory[];
+  products: Product[];
+  /** Products with derived stock, status and valuation (archived excluded). */
+  productsWithStock: ProductWithStock[];
+  stockMovements: StockMovement[];
+  /** Out-of-stock first, then low stock — ready for the alerts card. */
+  stockAlerts: ProductWithStock[];
+  inventorySummary: InventorySummary;
 
   refresh: () => Promise<void>;
 
@@ -75,12 +105,76 @@ interface DataContextValue {
 
   createReminder: (input: CreateReminderInput) => Promise<Reminder>;
 
+  createProductCategory: (input: CreateProductCategoryInput) => Promise<ProductCategory>;
+  updateProductCategory: (id: string, patch: CreateProductCategoryInput) => Promise<ProductCategory>;
+  deleteProductCategory: (id: string) => Promise<void>;
+
+  createProduct: (input: CreateProductInput) => Promise<Product>;
+  updateProduct: (id: string, patch: Partial<CreateProductInput>) => Promise<Product>;
+  /** Archives the product: stock history and past profit stay intact. */
+  deleteProduct: (id: string) => Promise<void>;
+  getProductById: (id: string) => ProductWithStock | undefined;
+  /** Scanner/search helper — exact barcode wins, then case-insensitive SKU. */
+  lookupProduct: (code: string) => ProductWithStock | undefined;
+  productMovements: (productId: string) => StockMovement[];
+  productStockLedger: (productId: string) => StockLedgerRow[];
+  /** Per-product profit, optionally limited to a date range. */
+  productProfit: (range?: ReportRange) => ProductProfit[];
+
+  createStockMovement: (input: CreateStockMovementInput) => Promise<StockMovement>;
+  updateStockMovement: (
+    id: string,
+    patch: Partial<CreateStockMovementInput>,
+  ) => Promise<StockMovement>;
+  deleteStockMovement: (id: string) => Promise<void>;
+
   loadSample: () => Promise<void>;
   clearData: () => Promise<void>;
   exportAll: () => Promise<unknown>;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
+
+/** Blank optional text becomes null so partial unique indexes on SKU/barcode
+ * never collide on a row of empty strings. */
+function cleanText(value: string | null | undefined): string | null {
+  if (value == null) return null;
+  const trimmed = value.trim();
+  return trimmed === '' ? null : trimmed;
+}
+
+/** Finite and non-negative; an empty number input (NaN) collapses to 0. */
+function nonNegative(value: number | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  return Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
+/**
+ * Sanitizes product input before it reaches a backend, so both the offline and
+ * the Supabase adapter receive identical, constraint-safe values.
+ */
+function normalizeProduct(input: CreateProductInput): CreateProductInput;
+function normalizeProduct(input: Partial<CreateProductInput>): Partial<CreateProductInput>;
+function normalizeProduct(input: Partial<CreateProductInput>): Partial<CreateProductInput> {
+  const out: Partial<CreateProductInput> = { ...input };
+
+  if (out.name !== undefined) {
+    out.name = out.name.trim();
+    if (!out.name) throw new Error('Product name is required');
+  }
+  if (out.sku !== undefined) out.sku = cleanText(out.sku);
+  if (out.barcode !== undefined) out.barcode = cleanText(out.barcode);
+  if (out.notes !== undefined) out.notes = cleanText(out.notes);
+  if (out.photoUrl !== undefined) out.photoUrl = cleanText(out.photoUrl);
+  if (out.categoryId !== undefined) out.categoryId = cleanText(out.categoryId);
+  if (out.purchasePrice !== undefined) out.purchasePrice = nonNegative(out.purchasePrice);
+  if (out.sellingPrice !== undefined) out.sellingPrice = nonNegative(out.sellingPrice);
+  if (out.lowStockThreshold !== undefined) out.lowStockThreshold = nonNegative(out.lowStockThreshold);
+  if (out.openingStock !== undefined) {
+    out.openingStock = Number.isFinite(out.openingStock) ? out.openingStock : 0;
+  }
+  return out;
+}
 
 export function DataProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -95,21 +189,40 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [parties, setParties] = useState<Party[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [productCategories, setProductCategories] = useState<ProductCategory[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
 
   // Guards against writes before a business exists and against stale reloads.
   const businessRef = useRef<Business | null>(null);
   businessRef.current = business;
 
+  /** Empties every per-business collection — used on sign-out and shop switch. */
+  const resetCollections = useCallback(() => {
+    setParties([]);
+    setTransactions([]);
+    setExpenses([]);
+    setProductCategories([]);
+    setProducts([]);
+    setStockMovements([]);
+  }, []);
+
   const loadData = useCallback(
     async (businessId: string) => {
-      const [p, t, e] = await Promise.all([
+      const [p, t, e, cats, prods, moves] = await Promise.all([
         adapter.listParties(businessId),
         adapter.listTransactions(businessId),
         adapter.listExpenses(businessId),
+        adapter.listProductCategories(businessId),
+        adapter.listProducts(businessId),
+        adapter.listStockMovements(businessId),
       ]);
       setParties(p);
       setTransactions(t);
       setExpenses(e);
+      setProductCategories(cats);
+      setProducts(prods);
+      setStockMovements(moves);
     },
     [adapter],
   );
@@ -124,31 +237,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const biz = businesses[0] ?? null;
       setBusiness(biz);
       if (biz) await loadData(biz.id);
-      else {
-        setParties([]);
-        setTransactions([]);
-        setExpenses([]);
-      }
+      else resetCollections();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
       setReady(true);
       setLoading(false);
     }
-  }, [adapter, user, loadData]);
+  }, [adapter, user, loadData, resetCollections]);
 
   // Re-bootstrap whenever the signed-in user changes.
   useEffect(() => {
     if (!user) {
       setBusiness(null);
-      setParties([]);
-      setTransactions([]);
-      setExpenses([]);
+      resetCollections();
       setReady(false);
       return;
     }
     void bootstrap();
-  }, [user, bootstrap]);
+  }, [user, bootstrap, resetCollections]);
 
   // After the offline outbox flushes on reconnect, pull fresh data.
   useEffect(() => {
@@ -305,6 +412,112 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [adapter, requireContext],
   );
 
+  /* ── Product categories ───────────────────────────────────────────────── */
+  const createProductCategory = useCallback<DataContextValue['createProductCategory']>(
+    async (input) => {
+      const { businessId } = requireContext();
+      const name = input.name.trim();
+      if (!name) throw new Error('Category name is required');
+      const category = await adapter.createProductCategory(businessId, { name });
+      await loadData(businessId);
+      return category;
+    },
+    [adapter, requireContext, loadData],
+  );
+
+  const updateProductCategory = useCallback<DataContextValue['updateProductCategory']>(
+    async (id, patch) => {
+      const { businessId } = requireContext();
+      const name = patch.name.trim();
+      if (!name) throw new Error('Category name is required');
+      const category = await adapter.updateProductCategory(id, { name });
+      await loadData(businessId);
+      return category;
+    },
+    [adapter, requireContext, loadData],
+  );
+
+  const deleteProductCategory = useCallback<DataContextValue['deleteProductCategory']>(
+    async (id) => {
+      const { businessId } = requireContext();
+      await adapter.deleteProductCategory(id);
+      await loadData(businessId);
+    },
+    [adapter, requireContext, loadData],
+  );
+
+  /* ── Products ─────────────────────────────────────────────────────────── */
+  const createProduct = useCallback<DataContextValue['createProduct']>(
+    async (input) => {
+      const { userId, businessId } = requireContext();
+      const product = await adapter.createProduct(businessId, userId, normalizeProduct(input));
+      await loadData(businessId);
+      return product;
+    },
+    [adapter, requireContext, loadData],
+  );
+
+  const updateProduct = useCallback<DataContextValue['updateProduct']>(
+    async (id, patch) => {
+      const { businessId } = requireContext();
+      const product = await adapter.updateProduct(id, normalizeProduct(patch));
+      await loadData(businessId);
+      return product;
+    },
+    [adapter, requireContext, loadData],
+  );
+
+  const deleteProduct = useCallback<DataContextValue['deleteProduct']>(
+    async (id) => {
+      const { businessId } = requireContext();
+      await adapter.deleteProduct(id);
+      await loadData(businessId);
+    },
+    [adapter, requireContext, loadData],
+  );
+
+  /* ── Stock movements ──────────────────────────────────────────────────── */
+  const createStockMovement = useCallback<DataContextValue['createStockMovement']>(
+    async (input) => {
+      const { userId, businessId } = requireContext();
+      // The DB enforces quantity > 0 too; fail here so the user gets a message
+      // instead of a Postgres constraint error.
+      if (!(Math.abs(input.quantity) > 0)) throw new Error('Quantity must be greater than zero');
+      const movement = await adapter.createStockMovement(businessId, userId, {
+        ...input,
+        quantity: Math.abs(input.quantity),
+      });
+      await loadData(businessId);
+      return movement;
+    },
+    [adapter, requireContext, loadData],
+  );
+
+  const updateStockMovement = useCallback<DataContextValue['updateStockMovement']>(
+    async (id, patch) => {
+      const { businessId } = requireContext();
+      if (patch.quantity !== undefined && !(Math.abs(patch.quantity) > 0)) {
+        throw new Error('Quantity must be greater than zero');
+      }
+      const movement = await adapter.updateStockMovement(id, {
+        ...patch,
+        ...(patch.quantity === undefined ? {} : { quantity: Math.abs(patch.quantity) }),
+      });
+      await loadData(businessId);
+      return movement;
+    },
+    [adapter, requireContext, loadData],
+  );
+
+  const deleteStockMovement = useCallback<DataContextValue['deleteStockMovement']>(
+    async (id) => {
+      const { businessId } = requireContext();
+      await adapter.deleteStockMovement(id);
+      await loadData(businessId);
+    },
+    [adapter, requireContext, loadData],
+  );
+
   /* ── Utilities (sample data / export / wipe) ──────────────────────────── */
   const loadSample = useCallback(async () => {
     const { userId, businessId } = requireContext();
@@ -316,11 +529,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const clearData = useCallback(async () => {
     if (adapter.clearAll) await adapter.clearAll();
     setBusiness(null);
-    setParties([]);
-    setTransactions([]);
-    setExpenses([]);
+    resetCollections();
     await bootstrap();
-  }, [adapter, bootstrap]);
+  }, [adapter, bootstrap, resetCollections]);
 
   const exportAll = useCallback(async () => {
     const biz = businessRef.current;
@@ -365,6 +576,49 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [parties, txnsByParty],
   );
 
+  /* ── Derived inventory views ──────────────────────────────────────────── */
+  const movesByProduct = useMemo(() => groupMovementsByProduct(stockMovements), [stockMovements]);
+
+  const productsWithStock = useMemo(
+    () => withStock(products, movesByProduct),
+    [products, movesByProduct],
+  );
+
+  const stockAlerts = useMemo(() => lowStockAlerts(productsWithStock), [productsWithStock]);
+  const inventorySummary = useMemo(() => summarizeInventory(productsWithStock), [productsWithStock]);
+
+  const productById = useMemo(() => {
+    const map = new Map<string, ProductWithStock>();
+    for (const p of productsWithStock) map.set(p.id, p);
+    return map;
+  }, [productsWithStock]);
+
+  const getProductById = useCallback((id: string) => productById.get(id), [productById]);
+
+  const lookupProduct = useCallback(
+    (code: string) => findByCode(productsWithStock, code),
+    [productsWithStock],
+  );
+
+  const productMovements = useCallback(
+    (productId: string) => movesByProduct.get(productId) ?? [],
+    [movesByProduct],
+  );
+
+  const productStockLedger = useCallback(
+    (productId: string) => {
+      const product = products.find((p) => p.id === productId);
+      if (!product) return [];
+      return computeStockLedgerRows(product, movesByProduct.get(productId) ?? []);
+    },
+    [products, movesByProduct],
+  );
+
+  const productProfit = useCallback(
+    (range?: ReportRange) => computeProductProfit(products, stockMovements, range),
+    [products, stockMovements],
+  );
+
   const value = useMemo<DataContextValue>(
     () => ({
       ready,
@@ -380,6 +634,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       transactions,
       expenses,
       txnsByParty,
+      productCategories,
+      products,
+      productsWithStock,
+      stockMovements,
+      stockAlerts,
+      inventorySummary,
       refresh,
       createBusiness,
       updateBusiness,
@@ -396,6 +656,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
       updateExpense,
       deleteExpense,
       createReminder,
+      createProductCategory,
+      updateProductCategory,
+      deleteProductCategory,
+      createProduct,
+      updateProduct,
+      deleteProduct,
+      getProductById,
+      lookupProduct,
+      productMovements,
+      productStockLedger,
+      productProfit,
+      createStockMovement,
+      updateStockMovement,
+      deleteStockMovement,
       loadSample,
       clearData,
       exportAll,
@@ -413,6 +687,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       transactions,
       expenses,
       txnsByParty,
+      productCategories,
+      products,
+      productsWithStock,
+      stockMovements,
+      stockAlerts,
+      inventorySummary,
       refresh,
       createBusiness,
       updateBusiness,
@@ -429,6 +709,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
       updateExpense,
       deleteExpense,
       createReminder,
+      createProductCategory,
+      updateProductCategory,
+      deleteProductCategory,
+      createProduct,
+      updateProduct,
+      deleteProduct,
+      getProductById,
+      lookupProduct,
+      productMovements,
+      productStockLedger,
+      productProfit,
+      createStockMovement,
+      updateStockMovement,
+      deleteStockMovement,
       loadSample,
       clearData,
       exportAll,

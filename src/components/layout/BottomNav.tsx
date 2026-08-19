@@ -7,6 +7,7 @@ import {
   HelpCircle,
   Home,
   MoreHorizontal,
+  Package,
   Plus,
   Receipt,
   Settings,
@@ -36,6 +37,7 @@ const RIGHT_TABS: Tab[] = [{ to: '/suppliers', labelKey: 'nav.suppliers', icon: 
 
 /** Secondary destinations, reached from the "More" sheet. */
 const MORE_LINKS: Tab[] = [
+  { to: '/products', labelKey: 'nav.products', icon: Package },
   { to: '/reports', labelKey: 'nav.reports', icon: BarChart3 },
   { to: '/transactions', labelKey: 'nav.transactions', icon: Receipt },
   { to: '/expenses', labelKey: 'nav.expenses', icon: Wallet },

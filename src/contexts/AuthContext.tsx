@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
 import { isSupabaseConfigured } from '@/lib/env';
+import { webRedirectUrl } from '@/lib/native';
 import { uuid } from '@/utils/id';
 
 export interface AuthUser {
@@ -123,7 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (isSupabaseConfigured && supabase) {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: window.location.origin },
+        options: { redirectTo: webRedirectUrl() },
       });
       return error ? { ok: false, error: error.message } : { ok: true };
     }
@@ -144,7 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const resetPassword = useCallback<AuthContextValue['resetPassword']>(async (email) => {
     if (isSupabaseConfigured && supabase) {
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: `${window.location.origin}/reset`,
+        redirectTo: webRedirectUrl('/reset'),
       });
       return error ? { ok: false, error: error.message } : { ok: true };
     }

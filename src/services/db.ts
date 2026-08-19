@@ -4,7 +4,12 @@
  */
 
 const DB_NAME = 'hisabmate';
-const DB_VERSION = 1;
+/**
+ * Bump this whenever a store or index is added. The upgrade handler only ever
+ * CREATES missing stores, so existing local data survives the migration.
+ *   v1 → v2: products, product_categories, stock_movements (inventory).
+ */
+const DB_VERSION = 2;
 
 export type StoreName =
   | 'profiles'
@@ -13,7 +18,10 @@ export type StoreName =
   | 'parties'
   | 'transactions'
   | 'expenses'
-  | 'reminders';
+  | 'reminders'
+  | 'productCategories'
+  | 'products'
+  | 'stockMovements';
 
 const STORES: { name: StoreName; indexes?: { name: string; keyPath: string }[] }[] = [
   { name: 'profiles' },
@@ -23,6 +31,15 @@ const STORES: { name: StoreName; indexes?: { name: string; keyPath: string }[] }
   { name: 'transactions', indexes: [{ name: 'businessId', keyPath: 'businessId' }, { name: 'partyId', keyPath: 'partyId' }] },
   { name: 'expenses', indexes: [{ name: 'businessId', keyPath: 'businessId' }] },
   { name: 'reminders', indexes: [{ name: 'businessId', keyPath: 'businessId' }] },
+  { name: 'productCategories', indexes: [{ name: 'businessId', keyPath: 'businessId' }] },
+  { name: 'products', indexes: [{ name: 'businessId', keyPath: 'businessId' }] },
+  {
+    name: 'stockMovements',
+    indexes: [
+      { name: 'businessId', keyPath: 'businessId' },
+      { name: 'productId', keyPath: 'productId' },
+    ],
+  },
 ];
 
 let dbPromise: Promise<IDBDatabase> | null = null;

@@ -27,6 +27,8 @@ const Dashboard = lazy(() => import('@/pages/Dashboard'));
 const Customers = lazy(() => import('@/pages/Customers'));
 const Suppliers = lazy(() => import('@/pages/Suppliers'));
 const PartyProfile = lazy(() => import('@/pages/PartyProfile'));
+const Products = lazy(() => import('@/pages/Products'));
+const ProductProfile = lazy(() => import('@/pages/ProductProfile'));
 const Transactions = lazy(() => import('@/pages/Transactions'));
 const Expenses = lazy(() => import('@/pages/Expenses'));
 const Reports = lazy(() => import('@/pages/Reports'));
@@ -86,6 +88,8 @@ export default function App() {
                                 <Route path="customers/:id" element={<PartyProfile />} />
                                 <Route path="suppliers" element={<Suppliers />} />
                                 <Route path="suppliers/:id" element={<PartyProfile />} />
+                                <Route path="products" element={<Products />} />
+                                <Route path="products/:id" element={<ProductProfile />} />
                                 <Route path="transactions" element={<Transactions />} />
                                 <Route path="expenses" element={<Expenses />} />
                                 <Route path="reports" element={<Reports />} />

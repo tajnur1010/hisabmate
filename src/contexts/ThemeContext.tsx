@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { ThemeMode } from '@/types';
+import { applyNativeTheme } from '@/lib/native';
 
 const STORAGE_KEY = 'hisab.theme';
 
@@ -44,6 +45,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     root.classList.toggle('dark', resolved === 'dark');
     const meta = document.querySelector('meta[name="theme-color"]:not([media])');
     if (meta) meta.setAttribute('content', resolved === 'dark' ? '#0b1512' : '#0D9F6E');
+    // In the installed Android app the status bar is native chrome, so it has to
+    // be recoloured explicitly to match. No-op in the browser.
+    void applyNativeTheme(resolved);
   }, [resolved]);
 
   const setMode = useCallback((next: ThemeMode) => {

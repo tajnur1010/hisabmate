@@ -1,14 +1,31 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, ArrowRight } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowRight,
+  BarChart3,
+  ChevronRight,
+  HelpCircle,
+  Package,
+  PackageX,
+  Receipt,
+  Settings,
+  Truck,
+  Users,
+  Wallet,
+} from 'lucide-react';
 import { useData } from '@/contexts/DataContext';
 import { useI18n } from '@/contexts/I18nContext';
+import { useSettings } from '@/contexts/SettingsContext';
 import { useQuickActions } from '@/features/quick-actions/QuickActions';
 import { summarizeDashboard } from '@/services/ledger';
 import { Card, EmptyState, MoneyText } from '@/components/ui';
 import { PartyRow } from '@/features/parties/PartyRow';
 import { partyBalanceView } from '@/features/parties/partyView';
 import { TYPE_ICON, TYPE_TONE_CLASS, CATEGORY_ICON } from '@/features/shared/lookups';
+import type { TranslationKey } from '@/i18n/en';
+import { toBengaliDigits } from '@/utils/money';
 import { cn } from '@/utils/cn';
 
 function greetingKey(hour: number) {
@@ -20,8 +37,9 @@ function greetingKey(hour: number) {
 export default function Dashboard() {
   const { t } = useI18n();
   const navigate = useNavigate();
-  const { business, partiesWithBalance, transactions, expenses, parties } = useData();
+  const { business, partiesWithBalance, transactions, expenses, parties, stockAlerts } = useData();
   const { openTransaction, openExpense } = useQuickActions();
+  const { settings } = useSettings();
 
   const summary = useMemo(
     () => summarizeDashboard(partiesWithBalance, transactions, expenses),
@@ -43,8 +61,11 @@ export default function Dashboard() {
 
   const greeting = t(greetingKey(new Date().getHours()));
 
+  /** Counts follow the same numeral preference as money figures. */
+  const num = (n: number) => (settings.showBengaliNumerals ? toBengaliDigits(n) : String(n));
+
   return (
-    <div className="space-y-5 px-4 py-4">
+    <div className="space-y-4 px-4 py-4">
       <header>
         <p className="text-sm text-muted">{greeting}</p>
         <h1 className="font-display text-base font-semibold text-ink">
@@ -52,39 +73,54 @@ export default function Dashboard() {
         </h1>
       </header>
 
-      {/* Hero: total receivable */}
-      <Card elevated spine="brand" padded={false} className="p-5">
-        <p className="text-sm font-medium text-muted">{t('dashboard.totalReceivable')}</p>
-        <MoneyText amount={summary.totalReceivable} tone="gold" size="balance" className="mt-1 block" />
-        <p className="mt-1 text-xs text-faint">{t('dashboard.youWillGet')}</p>
+      {/* Hero: total receivable — the one figure a shop owner opens the app for.
+          Two lines only, so the tools and names below stay above the fold. */}
+      <Card elevated spine="brand" padded={false} className="px-4 py-3.5">
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="text-xs font-medium text-muted">{t('dashboard.totalReceivable')}</p>
+          <span className="text-[10px] text-faint">{t('dashboard.youWillGet')}</span>
+        </div>
+        <MoneyText
+          amount={summary.totalReceivable}
+          tone="gold"
+          size="balance-sm"
+          className="mt-1 block"
+        />
       </Card>
 
-      {/* Stat grid */}
-      <div className="grid grid-cols-2 gap-3">
-        <Stat label={t('dashboard.totalPayable')} amount={summary.totalPayable} tone="danger" />
-        <button type="button" onClick={() => navigate('/customers')} className="text-left">
-          <Card
-            className={cn('h-full p-4', summary.overdueCount > 0 && 'border-danger/30')}
-            interactive
-          >
-            <p className="flex items-center gap-1.5 text-xs font-medium text-muted">
-              {summary.overdueCount > 0 && <AlertTriangle size={13} className="text-danger" />}
-              {t('dashboard.overdue')}
-            </p>
-            <MoneyText
-              amount={summary.overdueAmount}
-              tone={summary.overdueCount > 0 ? 'danger' : 'muted'}
-              size="lg"
-              className="mt-1 block"
-            />
-            <p className="mt-0.5 text-xs text-faint">
-              {summary.overdueCount} {t('dashboard.overdueCustomers').toLowerCase()}
-            </p>
-          </Card>
-        </button>
-        <Stat label={t('dashboard.todayCollection')} amount={summary.todayCollection} tone="positive" />
-        <Stat label={t('dashboard.todayExpense')} amount={summary.todayExpense} tone="ink" />
-      </div>
+      {/* The four headline figures share ONE divided card. Four separate cards
+          cost three gaps plus four sets of padding, which pushed everything
+          else off the first screen. */}
+      <Card padded={false} className="overflow-hidden">
+        <div className="grid grid-cols-2">
+          <StatCell
+            label={t('dashboard.totalPayable')}
+            amount={summary.totalPayable}
+            tone="danger"
+            className="border-b border-r border-line"
+          />
+          <StatCell
+            label={t('dashboard.overdue')}
+            amount={summary.overdueAmount}
+            tone={summary.overdueCount > 0 ? 'danger' : 'muted'}
+            className="border-b border-line"
+            alert={summary.overdueCount > 0}
+            badge={summary.overdueCount > 0 ? num(summary.overdueCount) : undefined}
+            onClick={() => navigate('/customers')}
+          />
+          <StatCell
+            label={t('dashboard.todayCollection')}
+            amount={summary.todayCollection}
+            tone="positive"
+            className="border-r border-line"
+          />
+          <StatCell
+            label={t('dashboard.todayExpense')}
+            amount={summary.todayExpense}
+            tone="ink"
+          />
+        </div>
+      </Card>
 
       {/* Quick actions */}
       <div className="grid grid-cols-3 gap-3">
@@ -100,6 +136,42 @@ export default function Dashboard() {
         />
         <QuickTile label={t('quick.expense')} expense onClick={openExpense} />
       </div>
+
+      {/* Feature launcher — a compact grid of small icon tiles so every part of
+          the app is one tap from home instead of buried in the "More" sheet.
+          Only features that already work are listed; each new phase adds its
+          own tile as it ships, so home never advertises a screen that isn't
+          real. */}
+      <section>
+        <h2 className="mb-2 text-sm font-semibold text-muted">{t('dashboard.tools')}</h2>
+        <FeatureGrid />
+      </section>
+
+      {/* Stock alerts — only appears when something needs restocking, so home
+          stays quiet for shops that don't track inventory. */}
+      {stockAlerts.length > 0 && (
+        <button type="button" onClick={() => navigate('/products')} className="w-full text-left">
+          <Card interactive spine="warning" className="flex items-center gap-3">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-warning-soft text-warning">
+              <PackageX size={17} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-ink">{t('product.alerts')}</p>
+              <p className="mt-0.5 truncate text-xs text-muted">
+                {stockAlerts
+                  .slice(0, 2)
+                  .map((p) => p.name)
+                  .join(', ')}
+                {stockAlerts.length > 2 ? ' …' : ''}
+              </p>
+            </div>
+            <span className="font-num tabular text-sm font-semibold text-warning">
+              {num(stockAlerts.length)}
+            </span>
+            <ChevronRight size={16} className="shrink-0 text-faint" />
+          </Card>
+        </button>
+      )}
 
       {/* People: customers & suppliers by name. Tap a name for full details + ledger. */}
       {parties.length === 0 ? (
@@ -123,7 +195,9 @@ export default function Dashboard() {
           <div className="mb-1 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-muted">{t('dashboard.parties')}</h2>
             {activeParties.length > 0 && (
-              <span className="text-xs font-medium text-faint">{activeParties.length}</span>
+              <span className="font-num tabular text-xs font-medium text-faint">
+                {num(activeParties.length)}
+              </span>
             )}
           </div>
           {activeParties.length > 0 ? (
@@ -144,20 +218,107 @@ export default function Dashboard() {
   );
 }
 
-function Stat({
+/**
+ * One figure inside the shared stat card. Rendered as a plain cell, or as a
+ * button when it leads somewhere (the overdue cell opens Customers). Borders
+ * are passed in by the parent so the 2×2 grid reads as one ruled table rather
+ * than four floating boxes.
+ */
+function StatCell({
   label,
   amount,
   tone,
+  alert,
+  badge,
+  onClick,
+  className,
 }: {
   label: string;
   amount: number;
   tone: 'danger' | 'positive' | 'ink' | 'muted';
+  /** Shows a warning icon before the label. */
+  alert?: boolean;
+  /** Small count pill after the label (already numeral-formatted). */
+  badge?: string;
+  onClick?: () => void;
+  className?: string;
 }) {
+  const body = (
+    <>
+      <p className="flex items-center gap-1 text-[11px] font-medium text-muted">
+        {alert && <AlertTriangle size={11} className="shrink-0 text-danger" />}
+        <span className="truncate">{label}</span>
+        {badge && (
+          <span className="font-num tabular shrink-0 rounded-full bg-danger-soft px-1.5 text-[10px] font-semibold text-danger">
+            {badge}
+          </span>
+        )}
+      </p>
+      <MoneyText amount={amount} tone={tone} size="md" className="mt-0.5 block font-semibold" />
+    </>
+  );
+
+  const base = 'px-3.5 py-2.5 text-left';
+  return onClick ? (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(base, 'transition-colors active:bg-surface-2', className)}
+    >
+      {body}
+    </button>
+  ) : (
+    <div className={cn(base, className)}>{body}</div>
+  );
+}
+
+/** One tool in the home feature launcher. */
+interface Feature {
+  to: string;
+  labelKey: TranslationKey;
+  icon: LucideIcon;
+}
+
+/**
+ * The features shown on home. This is deliberately limited to what already
+ * works today; each future phase (invoices, accounts, staff…) adds its own
+ * tile here as it ships, so home never advertises a screen that isn't real.
+ */
+const FEATURES: Feature[] = [
+  { to: '/customers', labelKey: 'nav.customers', icon: Users },
+  { to: '/suppliers', labelKey: 'nav.suppliers', icon: Truck },
+  { to: '/products', labelKey: 'nav.products', icon: Package },
+  { to: '/transactions', labelKey: 'nav.transactions', icon: Receipt },
+  { to: '/expenses', labelKey: 'nav.expenses', icon: Wallet },
+  { to: '/reports', labelKey: 'nav.reports', icon: BarChart3 },
+  { to: '/settings', labelKey: 'nav.settings', icon: Settings },
+  { to: '/help', labelKey: 'nav.help', icon: HelpCircle },
+];
+
+/**
+ * A four-per-row grid of small icon tiles — the quick way into every part of
+ * the app from home, in the style shop owners know from khata apps but drawn
+ * in HisabMate's own rounded, jade-tinted look rather than copied.
+ */
+function FeatureGrid() {
+  const { t } = useI18n();
+  const navigate = useNavigate();
   return (
-    <Card className="p-4">
-      <p className="text-xs font-medium text-muted">{label}</p>
-      <MoneyText amount={amount} tone={tone} size="lg" className="mt-1 block" />
-    </Card>
+    <div className="grid grid-cols-4 gap-2">
+      {FEATURES.map(({ to, labelKey, icon: Icon }) => (
+        <button
+          key={to}
+          type="button"
+          onClick={() => navigate(to)}
+          className="flex flex-col items-center gap-1.5 rounded-2xl border border-line bg-elevated px-1 py-3 text-center transition-transform active:scale-95"
+        >
+          <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand-soft text-brand-strong">
+            <Icon size={17} />
+          </span>
+          <span className="text-[10.5px] font-medium leading-tight text-ink">{t(labelKey)}</span>
+        </button>
+      ))}
+    </div>
   );
 }
 

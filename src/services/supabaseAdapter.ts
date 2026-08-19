@@ -3,8 +3,11 @@ import type {
   Expense,
   Party,
   PartyType,
+  Product,
+  ProductCategory,
   Profile,
   Reminder,
+  StockMovement,
   Transaction,
 } from '@/types';
 import { uuid } from '@/utils/id';
@@ -15,10 +18,15 @@ import type {
   CreateBusinessInput,
   CreateExpenseInput,
   CreatePartyInput,
+  CreateProductCategoryInput,
+  CreateProductInput,
   CreateReminderInput,
+  CreateStockMovementInput,
   CreateTransactionInput,
   DataAdapter,
   ExpenseQuery,
+  ProductQuery,
+  StockMovementQuery,
   TransactionQuery,
 } from './adapter';
 
@@ -117,6 +125,96 @@ const toExpense = (r: ExpenseRow): Expense => ({
   method: r.method,
   occurredAt: r.occurred_at,
   receiptUrl: r.receipt_url,
+  createdAt: r.created_at,
+  createdBy: r.created_by,
+  clientId: r.client_id ?? undefined,
+  deletedAt: r.deleted_at,
+});
+
+type ProductCategoryRow = {
+  id: string;
+  business_id: string;
+  name: string;
+  created_at: string;
+};
+
+type ProductRow = {
+  id: string;
+  business_id: string;
+  category_id: string | null;
+  name: string;
+  sku: string | null;
+  barcode: string | null;
+  unit: Product['unit'];
+  purchase_price: number;
+  selling_price: number;
+  opening_stock: number;
+  low_stock_threshold: number;
+  photo_url: string | null;
+  notes: string | null;
+  archived: boolean | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type StockMovementRow = {
+  id: string;
+  business_id: string;
+  product_id: string;
+  type: StockMovement['type'];
+  reason: StockMovement['reason'];
+  quantity: number;
+  unit_cost: number | null;
+  unit_price: number | null;
+  note: string | null;
+  ref_type: StockMovement['refType'];
+  ref_id: string | null;
+  occurred_at: string;
+  created_at: string;
+  created_by: string;
+  client_id: string | null;
+  deleted_at: string | null;
+};
+
+const toProductCategory = (r: ProductCategoryRow): ProductCategory => ({
+  id: r.id,
+  businessId: r.business_id,
+  name: r.name,
+  createdAt: r.created_at,
+});
+
+const toProduct = (r: ProductRow): Product => ({
+  id: r.id,
+  businessId: r.business_id,
+  categoryId: r.category_id,
+  name: r.name,
+  sku: r.sku,
+  barcode: r.barcode,
+  unit: r.unit,
+  purchasePrice: Number(r.purchase_price) || 0,
+  sellingPrice: Number(r.selling_price) || 0,
+  openingStock: Number(r.opening_stock) || 0,
+  lowStockThreshold: Number(r.low_stock_threshold) || 0,
+  photoUrl: r.photo_url,
+  notes: r.notes,
+  archived: r.archived ?? false,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+});
+
+const toStockMovement = (r: StockMovementRow): StockMovement => ({
+  id: r.id,
+  businessId: r.business_id,
+  productId: r.product_id,
+  type: r.type,
+  reason: r.reason,
+  quantity: Number(r.quantity) || 0,
+  unitCost: r.unit_cost == null ? null : Number(r.unit_cost),
+  unitPrice: r.unit_price == null ? null : Number(r.unit_price),
+  note: r.note,
+  refType: r.ref_type,
+  refId: r.ref_id,
+  occurredAt: r.occurred_at,
   createdAt: r.created_at,
   createdBy: r.created_by,
   clientId: r.client_id ?? undefined,
@@ -490,6 +588,244 @@ export class SupabaseAdapter implements DataAdapter {
       sentAt: data.sent_at,
       createdBy: data.created_by,
     };
+  }
+
+  /* ── Product categories ─────────────────────────────────── */
+  async listProductCategories(businessId: string): Promise<ProductCategory[]> {
+    const { data, error } = await this.sb
+      .from('product_categories')
+      .select('*')
+      .eq('business_id', businessId)
+      .order('name', { ascending: true });
+    if (error) throw error;
+    return (data as ProductCategoryRow[]).map(toProductCategory);
+  }
+
+  async createProductCategory(
+    businessId: string,
+    input: CreateProductCategoryInput,
+  ): Promise<ProductCategory> {
+    const { data, error } = await this.sb
+      .from('product_categories')
+      .insert({ business_id: businessId, name: input.name.trim() })
+      .select()
+      .single();
+    if (error) throw error;
+    return toProductCategory(data as ProductCategoryRow);
+  }
+
+  async updateProductCategory(
+    id: string,
+    patch: CreateProductCategoryInput,
+  ): Promise<ProductCategory> {
+    const { data, error } = await this.sb
+      .from('product_categories')
+      .update({ name: patch.name.trim() })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return toProductCategory(data as ProductCategoryRow);
+  }
+
+  async deleteProductCategory(id: string): Promise<void> {
+    // Products keep existing, uncategorised — the FK is ON DELETE SET NULL.
+    const { error } = await this.sb.from('product_categories').delete().eq('id', id);
+    if (error) throw error;
+  }
+
+  /* ── Products ───────────────────────────────────────────── */
+  async listProducts(businessId: string, query: ProductQuery = {}): Promise<Product[]> {
+    let q = this.sb
+      .from('products')
+      .select('*')
+      .eq('business_id', businessId)
+      .neq('archived', true)
+      .order('name', { ascending: true });
+    if (query.categoryId) q = q.eq('category_id', query.categoryId);
+    if (query.search) {
+      const needle = query.search.trim().replace(/[%,]/g, '');
+      if (needle) q = q.or(`name.ilike.%${needle}%,sku.ilike.%${needle}%,barcode.ilike.%${needle}%`);
+    }
+    if (query.limit != null) q = q.range(query.offset ?? 0, (query.offset ?? 0) + query.limit - 1);
+    const { data, error } = await q;
+    if (error) throw error;
+    return (data as ProductRow[]).map(toProduct);
+  }
+
+  async getProduct(id: string): Promise<Product | null> {
+    const { data } = await this.sb.from('products').select('*').eq('id', id).maybeSingle();
+    return data ? toProduct(data as ProductRow) : null;
+  }
+
+  async findProductByCode(businessId: string, code: string): Promise<Product | null> {
+    const needle = code.trim();
+    if (!needle) return null;
+    // Barcode wins over SKU — a scanner always reads a barcode.
+    const { data: byBarcode } = await this.sb
+      .from('products')
+      .select('*')
+      .eq('business_id', businessId)
+      .eq('barcode', needle)
+      .neq('archived', true)
+      .maybeSingle();
+    if (byBarcode) return toProduct(byBarcode as ProductRow);
+
+    const { data: bySku } = await this.sb
+      .from('products')
+      .select('*')
+      .eq('business_id', businessId)
+      .eq('sku', needle)
+      .neq('archived', true)
+      .maybeSingle();
+    return bySku ? toProduct(bySku as ProductRow) : null;
+  }
+
+  async createProduct(
+    businessId: string,
+    _userId: string,
+    input: CreateProductInput,
+  ): Promise<Product> {
+    const { data, error } = await this.sb
+      .from('products')
+      .insert({
+        business_id: businessId,
+        category_id: input.categoryId ?? null,
+        name: input.name.trim(),
+        sku: input.sku?.trim() || null,
+        barcode: input.barcode?.trim() || null,
+        unit: input.unit ?? 'pcs',
+        purchase_price: Math.abs(input.purchasePrice ?? 0),
+        selling_price: Math.abs(input.sellingPrice ?? 0),
+        // Opening stock only — writing an 'opening' movement too would double count.
+        opening_stock: input.openingStock ?? 0,
+        low_stock_threshold: Math.abs(input.lowStockThreshold ?? 0),
+        photo_url: input.photoUrl ?? null,
+        notes: input.notes ?? null,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return toProduct(data as ProductRow);
+  }
+
+  async updateProduct(id: string, patch: Partial<CreateProductInput>): Promise<Product> {
+    const { data, error } = await this.sb
+      .from('products')
+      .update({
+        category_id: patch.categoryId,
+        name: patch.name?.trim(),
+        sku: patch.sku !== undefined ? patch.sku?.trim() || null : undefined,
+        barcode: patch.barcode !== undefined ? patch.barcode?.trim() || null : undefined,
+        unit: patch.unit,
+        purchase_price: patch.purchasePrice != null ? Math.abs(patch.purchasePrice) : undefined,
+        selling_price: patch.sellingPrice != null ? Math.abs(patch.sellingPrice) : undefined,
+        opening_stock: patch.openingStock,
+        low_stock_threshold:
+          patch.lowStockThreshold != null ? Math.abs(patch.lowStockThreshold) : undefined,
+        photo_url: patch.photoUrl,
+        notes: patch.notes,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return toProduct(data as ProductRow);
+  }
+
+  async deleteProduct(id: string): Promise<void> {
+    // Archive rather than delete: stock movements and past profit stay intact.
+    const { error } = await this.sb.from('products').update({ archived: true }).eq('id', id);
+    if (error) throw error;
+  }
+
+  /* ── Stock movements ────────────────────────────────────── */
+  async listStockMovements(
+    businessId: string,
+    query: StockMovementQuery = {},
+  ): Promise<StockMovement[]> {
+    let q = this.sb
+      .from('stock_movements')
+      .select('*')
+      .eq('business_id', businessId)
+      .is('deleted_at', null)
+      .order('occurred_at', { ascending: false });
+    if (query.productId) q = q.eq('product_id', query.productId);
+    if (query.type) q = q.eq('type', query.type);
+    if (query.reason) q = q.eq('reason', query.reason);
+    if (query.from) q = q.gte('occurred_at', query.from);
+    if (query.to) q = q.lte('occurred_at', query.to + 'T23:59:59.999Z');
+    if (query.limit != null) q = q.range(query.offset ?? 0, (query.offset ?? 0) + query.limit - 1);
+    const { data, error } = await q;
+    if (error) throw error;
+    return (data as StockMovementRow[]).map(toStockMovement);
+  }
+
+  async createStockMovement(
+    businessId: string,
+    userId: string,
+    input: CreateStockMovementInput,
+  ): Promise<StockMovement> {
+    if (input.clientId) {
+      const { data: existing } = await this.sb
+        .from('stock_movements')
+        .select('*')
+        .eq('client_id', input.clientId)
+        .maybeSingle();
+      if (existing) return toStockMovement(existing as StockMovementRow);
+    }
+    const { data, error } = await this.sb
+      .from('stock_movements')
+      .insert({
+        business_id: businessId,
+        product_id: input.productId,
+        type: input.type,
+        reason: input.reason ?? 'adjust',
+        quantity: Math.abs(input.quantity),
+        unit_cost: input.unitCost ?? null,
+        unit_price: input.unitPrice ?? null,
+        note: input.note ?? null,
+        ref_type: input.refType ?? 'manual',
+        ref_id: input.refId ?? null,
+        occurred_at: input.occurredAt ?? new Date().toISOString(),
+        created_by: userId,
+        client_id: input.clientId ?? uuid(),
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return toStockMovement(data as StockMovementRow);
+  }
+
+  async updateStockMovement(
+    id: string,
+    patch: Partial<CreateStockMovementInput>,
+  ): Promise<StockMovement> {
+    const { data, error } = await this.sb
+      .from('stock_movements')
+      .update({
+        type: patch.type,
+        reason: patch.reason,
+        quantity: patch.quantity != null ? Math.abs(patch.quantity) : undefined,
+        unit_cost: patch.unitCost,
+        unit_price: patch.unitPrice,
+        note: patch.note,
+        occurred_at: patch.occurredAt,
+      })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return toStockMovement(data as StockMovementRow);
+  }
+
+  async deleteStockMovement(id: string): Promise<void> {
+    const { error } = await this.sb
+      .from('stock_movements')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw error;
   }
 
   // Supabase writes are online & transactional, so there is no local outbox.

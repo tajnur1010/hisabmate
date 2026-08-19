@@ -25,7 +25,7 @@ import type {
   Transaction,
   TransactionType,
 } from '@/types';
-import { addDays, daysBetween, endOfDay, monthKey, startOfDay } from '@/utils/date';
+import { addDays, daysBetween, endOfDay, monthKey, startOfDay, toDateInputValue } from '@/utils/date';
 
 /** Signed effect of a transaction on its party's balance. */
 export function ledgerDelta(type: TransactionType, amount: number): number {
@@ -274,18 +274,20 @@ export function buildPeriodReport(
 }
 
 export function todayRange(now: Date = new Date()): ReportRange {
-  const iso = startOfDay(now).toISOString().slice(0, 10);
+  // Use the LOCAL calendar date (not UTC). `toISOString().slice(0,10)` would
+  // shift the day for non-UTC users (e.g. UTC+6 Bangladesh), making "Today"
+  // resolve to yesterday. toDateInputValue formats in local time.
+  const iso = toDateInputValue(now);
   return { from: iso, to: iso };
 }
 
 export function weekRange(now: Date = new Date()): ReportRange {
-  const from = addDays(now, -6);
-  return { from: from.toISOString().slice(0, 10), to: now.toISOString().slice(0, 10) };
+  return { from: toDateInputValue(addDays(now, -6)), to: toDateInputValue(now) };
 }
 
 export function monthRange(now: Date = new Date()): ReportRange {
   const first = new Date(now.getFullYear(), now.getMonth(), 1);
-  return { from: first.toISOString().slice(0, 10), to: now.toISOString().slice(0, 10) };
+  return { from: toDateInputValue(first), to: toDateInputValue(now) };
 }
 
 export function expensesByCategory(

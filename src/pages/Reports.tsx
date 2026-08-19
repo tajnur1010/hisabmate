@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Download } from 'lucide-react';
-import type { ExpenseCategory } from '@/types';
+import type { ExpenseCategory, ProductUnit } from '@/types';
 import { useData } from '@/contexts/DataContext';
 import { useI18n } from '@/contexts/I18nContext';
 import { useSettings } from '@/contexts/SettingsContext';
@@ -14,17 +14,26 @@ import {
   todayRange,
   weekRange,
 } from '@/services/ledger';
+import { totalProductProfit } from '@/services/inventory';
 import { categoryLabelKey } from '@/features/shared/lookups';
+import { Qty, trimQuantity, unitLabelKey } from '@/features/products/productView';
 import { formatDate, formatDateTime } from '@/utils/date';
-import { formatMoney } from '@/utils/money';
+import { formatMoney, toBengaliDigits } from '@/utils/money';
 import { printHtml } from '@/utils/print';
 
 type RangeKey = 'daily' | 'weekly' | 'monthly';
 
-/** Period reports: headline metrics, cash-flow trend, expense mix — and a PDF export. */
+/** A long product list would bury the rest of the page, so the on-screen
+ *  profit card shows the best performers and the printed report shows all. */
+const PROFIT_ROWS_ON_SCREEN = 6;
+
+/**
+ * Period reports: headline metrics, product-wise profit, cash-flow trend and
+ * expense mix — plus a printable/PDF export of the same figures.
+ */
 export default function Reports() {
   const { t, lang } = useI18n();
-  const { business, partiesWithBalance, transactions, expenses } = useData();
+  const { business, partiesWithBalance, transactions, expenses, productProfit } = useData();
   const { settings } = useSettings();
   const [rangeKey, setRangeKey] = useState<RangeKey>('daily');
 
@@ -46,8 +55,16 @@ export default function Reports() {
   const cashFlow = useMemo(() => buildCashFlow(transactions, expenses, 6), [transactions, expenses]);
   const byCat = useMemo(() => expensesByCategory(expenses, range), [expenses, range]);
 
+  // Product-wise sales & profit for the same period. Only products that were
+  // actually sold appear, so shops that don't track inventory see nothing.
+  const profitRows = useMemo(() => productProfit(range), [productProfit, range]);
+  const profitTotals = useMemo(() => totalProductProfit(profitRows), [profitRows]);
+
   const maxFlow = Math.max(1, ...cashFlow.map((p) => Math.max(p.inflow, p.outflow)));
   const catTotal = byCat.reduce((s, c) => s + c.total, 0);
+
+  /** Counts follow the same numeral preference as money figures. */
+  const num = (n: number) => (settings.showBengaliNumerals ? toBengaliDigits(n) : String(n));
 
   const currency = business?.currency ?? '৳';
   const rangeLabel =
@@ -107,6 +124,33 @@ export default function Reports() {
         )
         .join('');
 
+    /** Quantity with its unit, honouring the Bengali-numeral preference. */
+    const qty = (value: number, unit: ProductUnit) => {
+      const digits = trimQuantity(Math.abs(value));
+      const sign = value < 0 ? '−' : '';
+      return `${sign}${bn ? toBengaliDigits(digits) : digits} ${t(unitLabelKey(unit))}`;
+    };
+
+    // The printed report lists every sold product, not just the top few.
+    const profitTable = profitRows.length
+      ? `<tr class="hd"><td>${esc(t('product.title'))}</td>` +
+        `<td class="num">${esc(t('product.sold'))}</td>` +
+        `<td class="num">${esc(t('product.revenue'))}</td>` +
+        `<td class="num">${esc(t('product.profit'))}</td></tr>` +
+        profitRows
+          .map(
+            (r) =>
+              `<tr><td>${esc(r.name)}</td>` +
+              `<td class="num">${esc(qty(r.quantitySold, r.unit))}</td>` +
+              `<td class="num">${esc(money(r.revenue))}</td>` +
+              `<td class="num">${esc(money(r.profit))}</td></tr>`,
+          )
+          .join('') +
+        `<tr class="total"><td>${esc(t('product.profit'))}</td><td class="num"></td>` +
+        `<td class="num">${esc(money(profitTotals.revenue))}</td>` +
+        `<td class="num">${esc(money(profitTotals.profit))}</td></tr>`
+      : '';
+
     const catRows = byCat.length
       ? byCat
           .map(({ category, total }) => row(t(categoryLabelKey(category as ExpenseCategory)), total))
@@ -156,7 +200,11 @@ export default function Reports() {
 
   <h2>${esc(t('reports.summary'))}</h2>
   <table>${metricTable}</table>
-
+${
+  profitTable
+    ? `\n  <h2>${esc(t('product.profitTitle'))}</h2>\n  <table>${profitTable}</table>\n`
+    : ''
+}
   <h2>${esc(t('reports.outstandingReceivable'))} · ${esc(t('reports.outstandingPayable'))}</h2>
   <table>${outstandingTable}</table>
 
@@ -218,6 +266,50 @@ export default function Reports() {
           hint={t('reports.profitHint')}
         />
       </div>
+
+      {/* Product-wise sales & profit for the selected period. Rendered only
+          when something was actually sold from stock, so ledger-only shops
+          never see an empty section. */}
+      {profitRows.length > 0 && (
+        <Card className="space-y-1">
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="text-sm font-semibold text-muted">{t('product.profitTitle')}</h2>
+            <MoneyText
+              amount={profitTotals.profit}
+              tone={profitTotals.profit >= 0 ? 'positive' : 'danger'}
+              size="md"
+              className="font-semibold"
+            />
+          </div>
+          <ul className="divide-y divide-line/70">
+            {profitRows.slice(0, PROFIT_ROWS_ON_SCREEN).map((r) => (
+              <li key={r.productId} className="flex items-center gap-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm text-ink">{r.name}</p>
+                  <p className="mt-0.5 flex items-center gap-1 text-[11px] text-faint">
+                    <span>{t('product.sold')}</span>
+                    <Qty value={r.quantitySold} unit={r.unit} />
+                    <span aria-hidden>·</span>
+                    <MoneyText amount={r.revenue} className="text-faint" />
+                  </p>
+                </div>
+                <MoneyText
+                  amount={r.profit}
+                  tone={r.profit >= 0 ? 'positive' : 'danger'}
+                  className="shrink-0 font-semibold"
+                />
+              </li>
+            ))}
+          </ul>
+          {profitRows.length > PROFIT_ROWS_ON_SCREEN && (
+            <p className="pt-1 text-[11px] text-faint">
+              +{num(profitRows.length - PROFIT_ROWS_ON_SCREEN)}{' '}
+              {t('product.totalProducts').toLowerCase()}
+            </p>
+          )}
+          <p className="pt-1 text-[11px] leading-tight text-faint">{t('product.profitHint')}</p>
+        </Card>
+      )}
 
       {/* Outstanding balances (live, not period-bound) */}
       <Card padded={false} className="flex divide-x divide-line">

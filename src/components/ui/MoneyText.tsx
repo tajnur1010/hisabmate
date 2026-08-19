@@ -5,7 +5,7 @@ import { useSettings } from '@/contexts/SettingsContext';
 import { cn } from '@/utils/cn';
 
 type MoneyTone = 'inherit' | 'ink' | 'muted' | 'positive' | 'danger' | 'brand' | 'gold' | 'auto';
-type MoneySize = 'inherit' | 'sm' | 'md' | 'lg' | 'balance' | 'balance-lg';
+type MoneySize = 'inherit' | 'sm' | 'md' | 'lg' | 'balance-sm' | 'balance' | 'balance-lg';
 
 interface MoneyTextProps {
   amount: number;
@@ -34,6 +34,7 @@ const sizeClass: Record<MoneySize, string> = {
   sm: 'text-sm',
   md: 'text-base',
   lg: 'text-xl',
+  'balance-sm': 'text-balance-sm leading-none',
   balance: 'text-balance leading-none',
   'balance-lg': 'text-balance-lg leading-none',
 };

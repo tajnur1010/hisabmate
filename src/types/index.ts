@@ -136,6 +136,94 @@ export interface Expense {
   deletedAt?: ISODateTime | null;
 }
 
+/* ---- Products & inventory ---- */
+
+/** Sale unit. Weight/volume units allow fractional quantities. */
+export type ProductUnit =
+  | 'pcs'
+  | 'kg'
+  | 'gram'
+  | 'litre'
+  | 'ml'
+  | 'dozen'
+  | 'box'
+  | 'metre'
+  | 'other';
+
+/**
+ * Direction of a stock change. Quantity is always a positive magnitude —
+ * direction comes from the type, exactly like TransactionType.
+ */
+export type StockMovementType = 'in' | 'out';
+
+/** Why stock moved. Drives labelling and product-profit maths. */
+export type StockMovementReason =
+  | 'opening' // initial stock when the product was created
+  | 'purchase' // bought from a supplier
+  | 'sale' // sold to a customer
+  | 'return_in' // customer returned goods to us
+  | 'return_out' // we returned goods to a supplier
+  | 'damage' // written off
+  | 'adjust' // physical stock-count correction
+  | 'transfer'; // moved between shops
+
+/** Traffic-light state for stock on hand. */
+export type StockStatus = 'out' | 'low' | 'ok';
+
+export interface ProductCategory {
+  id: ID;
+  businessId: ID;
+  name: string;
+  createdAt: ISODateTime;
+}
+
+export interface Product {
+  id: ID;
+  businessId: ID;
+  categoryId: ID | null;
+  name: string;
+  sku?: string | null;
+  barcode?: string | null;
+  unit: ProductUnit;
+  purchasePrice: number;
+  sellingPrice: number;
+  /**
+   * Stock on hand when the product was added. Current stock is DERIVED from
+   * this plus the signed effect of stock movements — never stored directly.
+   */
+  openingStock: number;
+  /** Low-stock alert threshold; 0 disables the alert. */
+  lowStockThreshold: number;
+  photoUrl?: string | null;
+  notes?: string | null;
+  createdAt: ISODateTime;
+  updatedAt: ISODateTime;
+  archived?: boolean;
+}
+
+export interface StockMovement {
+  id: ID;
+  businessId: ID;
+  productId: ID;
+  type: StockMovementType;
+  reason: StockMovementReason;
+  /** Always a positive magnitude; direction is derived from `type`. */
+  quantity: number;
+  /** Cost/price snapshot at movement time, so profit never rewrites history. */
+  unitCost?: number | null;
+  unitPrice?: number | null;
+  note?: string | null;
+  /** The document that caused this movement (invoice/return), when applicable. */
+  refType?: 'invoice' | 'return' | 'transaction' | 'manual' | null;
+  refId?: ID | null;
+  occurredAt: ISODateTime;
+  createdAt: ISODateTime;
+  createdBy: ID;
+  pending?: boolean;
+  clientId?: string;
+  deletedAt?: ISODateTime | null;
+}
+
 export interface Reminder {
   id: ID;
   businessId: ID;
@@ -215,6 +303,52 @@ export interface PeriodReport {
   estimatedProfit: number;
   outstandingReceivable: number;
   outstandingPayable: number;
+}
+
+/** A product with its DERIVED stock on hand and alert state. */
+export interface ProductWithStock extends Product {
+  /** openingStock + signed effect of every live movement. */
+  stock: number;
+  status: StockStatus;
+  /** Stock valued at purchase price (what it cost) and selling price (retail). */
+  stockValueAtCost: number;
+  stockValueAtRetail: number;
+  lastMovementAt: ISODateTime | null;
+}
+
+/** Ordered stock history with a running quantity, mirroring LedgerRow. */
+export interface StockLedgerRow {
+  movement: StockMovement;
+  /** Signed effect on stock (+in / −out). */
+  delta: number;
+  runningStock: number;
+}
+
+/** Per-product sales and realised profit over a period. */
+export interface ProductProfit {
+  productId: ID;
+  name: string;
+  unit: ProductUnit;
+  /** Quantity sold (net of customer returns). */
+  quantitySold: number;
+  /** Revenue at the price actually charged. */
+  revenue: number;
+  /** Cost of goods sold, from the cost snapshot on each movement. */
+  cost: number;
+  /** revenue − cost. */
+  profit: number;
+  /** profit / revenue as a percentage; 0 when revenue is 0. */
+  margin: number;
+}
+
+export interface InventorySummary {
+  productCount: number;
+  /** Products with stock at or below their threshold (threshold > 0). */
+  lowStockCount: number;
+  /** Products with stock <= 0. */
+  outOfStockCount: number;
+  totalStockValueAtCost: number;
+  totalStockValueAtRetail: number;
 }
 
 /** Parsed result from the voice-entry parser (needs confirmation before saving). */

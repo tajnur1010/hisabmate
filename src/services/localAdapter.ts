@@ -3,8 +3,11 @@ import type {
   Expense,
   Party,
   PartyType,
+  Product,
+  ProductCategory,
   Profile,
   Reminder,
+  StockMovement,
   Transaction,
 } from '@/types';
 import { uuid } from '@/utils/id';
@@ -15,10 +18,15 @@ import type {
   CreateBusinessInput,
   CreateExpenseInput,
   CreatePartyInput,
+  CreateProductCategoryInput,
+  CreateProductInput,
   CreateReminderInput,
+  CreateStockMovementInput,
   CreateTransactionInput,
   DataAdapter,
   ExpenseQuery,
+  ProductQuery,
+  StockMovementQuery,
   TransactionQuery,
 } from './adapter';
 
@@ -287,24 +295,269 @@ export class LocalAdapter implements DataAdapter {
     return idb.put('reminders', reminder);
   }
 
+  /* ── Product categories ─────────────────────────────────── */
+  async listProductCategories(businessId: string): Promise<ProductCategory[]> {
+    const rows = await idb.getByIndex<ProductCategory>('productCategories', 'businessId', businessId);
+    return rows.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async createProductCategory(
+    businessId: string,
+    input: CreateProductCategoryInput,
+  ): Promise<ProductCategory> {
+    const name = input.name.trim();
+    const existing = await this.listProductCategories(businessId);
+    // Mirrors the case-insensitive unique index in 0003_inventory.sql.
+    if (existing.some((c) => c.name.toLowerCase() === name.toLowerCase())) {
+      throw new Error('Category already exists');
+    }
+    const category: ProductCategory = {
+      id: uuid(),
+      businessId,
+      name,
+      createdAt: new Date().toISOString(),
+    };
+    return idb.put('productCategories', category);
+  }
+
+  async updateProductCategory(id: string, patch: CreateProductCategoryInput): Promise<ProductCategory> {
+    const existing = await idb.get<ProductCategory>('productCategories', id);
+    if (!existing) throw new Error('Category not found');
+    const name = patch.name.trim();
+    const siblings = await this.listProductCategories(existing.businessId);
+    if (siblings.some((c) => c.id !== id && c.name.toLowerCase() === name.toLowerCase())) {
+      throw new Error('Category already exists');
+    }
+    return idb.put('productCategories', { ...existing, name });
+  }
+
+  async deleteProductCategory(id: string): Promise<void> {
+    const existing = await idb.get<ProductCategory>('productCategories', id);
+    if (!existing) return;
+    // Products survive their category, just uncategorised (ON DELETE SET NULL).
+    const products = await idb.getByIndex<Product>('products', 'businessId', existing.businessId);
+    await Promise.all(
+      products
+        .filter((p) => p.categoryId === id)
+        .map((p) => idb.put('products', { ...p, categoryId: null })),
+    );
+    await idb.delete('productCategories', id);
+  }
+
+  /* ── Products ───────────────────────────────────────────── */
+  async listProducts(businessId: string, query: ProductQuery = {}): Promise<Product[]> {
+    let rows = await idb.getByIndex<Product>('products', 'businessId', businessId);
+    rows = rows.filter((p) => !p.archived);
+    if (query.categoryId) rows = rows.filter((p) => p.categoryId === query.categoryId);
+    if (query.search) {
+      const needle = query.search.trim().toLowerCase();
+      rows = rows.filter(
+        (p) =>
+          p.name.toLowerCase().includes(needle) ||
+          (p.sku ?? '').toLowerCase().includes(needle) ||
+          (p.barcode ?? '').toLowerCase().includes(needle),
+      );
+    }
+    rows.sort((a, b) => a.name.localeCompare(b.name));
+    const offset = query.offset ?? 0;
+    const limit = query.limit ?? rows.length;
+    return rows.slice(offset, offset + limit);
+  }
+
+  async getProduct(id: string): Promise<Product | null> {
+    return (await idb.get<Product>('products', id)) ?? null;
+  }
+
+  async findProductByCode(businessId: string, code: string): Promise<Product | null> {
+    const needle = code.trim();
+    if (!needle) return null;
+    const rows = await this.listProducts(businessId);
+    const byBarcode = rows.find((p) => p.barcode && p.barcode === needle);
+    if (byBarcode) return byBarcode;
+    const bySku = rows.find((p) => p.sku && p.sku.toLowerCase() === needle.toLowerCase());
+    return bySku ?? null;
+  }
+
+  /** Enforces the per-shop SKU/barcode uniqueness that the SQL schema requires. */
+  private async assertCodesFree(
+    businessId: string,
+    codes: { sku?: string | null; barcode?: string | null },
+    ignoreId?: string,
+  ): Promise<void> {
+    const rows = await idb.getByIndex<Product>('products', 'businessId', businessId);
+    const others = rows.filter((p) => p.id !== ignoreId);
+    if (codes.sku && others.some((p) => p.sku === codes.sku)) {
+      throw new Error('SKU already in use');
+    }
+    if (codes.barcode && others.some((p) => p.barcode === codes.barcode)) {
+      throw new Error('Barcode already in use');
+    }
+  }
+
+  async createProduct(
+    businessId: string,
+    _userId: string,
+    input: CreateProductInput,
+  ): Promise<Product> {
+    const sku = input.sku?.trim() || null;
+    const barcode = input.barcode?.trim() || null;
+    await this.assertCodesFree(businessId, { sku, barcode });
+
+    const now = new Date().toISOString();
+    const product: Product = {
+      id: uuid(),
+      businessId,
+      categoryId: input.categoryId ?? null,
+      name: input.name.trim(),
+      sku,
+      barcode,
+      unit: input.unit ?? 'pcs',
+      purchasePrice: Math.abs(input.purchasePrice ?? 0),
+      sellingPrice: Math.abs(input.sellingPrice ?? 0),
+      // Opening stock only — no 'opening' movement, or it would double count.
+      openingStock: input.openingStock ?? 0,
+      lowStockThreshold: Math.abs(input.lowStockThreshold ?? 0),
+      photoUrl: input.photoUrl ?? null,
+      notes: input.notes ?? null,
+      createdAt: now,
+      updatedAt: now,
+      archived: false,
+    };
+    return idb.put('products', product);
+  }
+
+  async updateProduct(id: string, patch: Partial<CreateProductInput>): Promise<Product> {
+    const existing = await idb.get<Product>('products', id);
+    if (!existing) throw new Error('Product not found');
+    const sku = patch.sku !== undefined ? patch.sku?.trim() || null : existing.sku;
+    const barcode = patch.barcode !== undefined ? patch.barcode?.trim() || null : existing.barcode;
+    await this.assertCodesFree(existing.businessId, { sku, barcode }, id);
+
+    const updated: Product = {
+      ...existing,
+      ...patch,
+      sku,
+      barcode,
+      name: patch.name?.trim() ?? existing.name,
+      purchasePrice:
+        patch.purchasePrice != null ? Math.abs(patch.purchasePrice) : existing.purchasePrice,
+      sellingPrice: patch.sellingPrice != null ? Math.abs(patch.sellingPrice) : existing.sellingPrice,
+      lowStockThreshold:
+        patch.lowStockThreshold != null
+          ? Math.abs(patch.lowStockThreshold)
+          : existing.lowStockThreshold,
+      updatedAt: new Date().toISOString(),
+    };
+    return idb.put('products', updated);
+  }
+
+  async deleteProduct(id: string): Promise<void> {
+    const existing = await idb.get<Product>('products', id);
+    if (!existing) return;
+    // Archive rather than delete, matching the Supabase backend: stock movements
+    // and past product profit stay intact and reports don't develop holes.
+    await idb.put('products', { ...existing, archived: true, updatedAt: new Date().toISOString() });
+  }
+
+  /* ── Stock movements ────────────────────────────────────── */
+  async listStockMovements(
+    businessId: string,
+    query: StockMovementQuery = {},
+  ): Promise<StockMovement[]> {
+    let rows = await idb.getByIndex<StockMovement>('stockMovements', 'businessId', businessId);
+    rows = rows.filter((m) => !m.deletedAt);
+    if (query.productId) rows = rows.filter((m) => m.productId === query.productId);
+    if (query.type) rows = rows.filter((m) => m.type === query.type);
+    if (query.reason) rows = rows.filter((m) => m.reason === query.reason);
+    if (query.from) rows = rows.filter((m) => m.occurredAt >= query.from!);
+    if (query.to) rows = rows.filter((m) => m.occurredAt <= query.to! + 'T23:59:59.999Z');
+    rows.sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : -1));
+    const offset = query.offset ?? 0;
+    const limit = query.limit ?? rows.length;
+    return rows.slice(offset, offset + limit);
+  }
+
+  async createStockMovement(
+    businessId: string,
+    userId: string,
+    input: CreateStockMovementInput,
+  ): Promise<StockMovement> {
+    if (input.clientId) {
+      const all = await idb.getByIndex<StockMovement>('stockMovements', 'businessId', businessId);
+      const dup = all.find((m) => m.clientId === input.clientId);
+      if (dup) return dup;
+    }
+    const now = new Date().toISOString();
+    const movement: StockMovement = {
+      id: uuid(),
+      businessId,
+      productId: input.productId,
+      type: input.type,
+      reason: input.reason ?? 'adjust',
+      quantity: Math.abs(input.quantity),
+      unitCost: input.unitCost ?? null,
+      unitPrice: input.unitPrice ?? null,
+      note: input.note ?? null,
+      refType: input.refType ?? 'manual',
+      refId: input.refId ?? null,
+      occurredAt: input.occurredAt ?? now,
+      createdAt: now,
+      createdBy: userId,
+      pending: !this.isOnline(),
+      clientId: input.clientId,
+      deletedAt: null,
+    };
+    return idb.put('stockMovements', movement);
+  }
+
+  async updateStockMovement(
+    id: string,
+    patch: Partial<CreateStockMovementInput>,
+  ): Promise<StockMovement> {
+    const existing = await idb.get<StockMovement>('stockMovements', id);
+    if (!existing) throw new Error('Stock movement not found');
+    const updated: StockMovement = {
+      ...existing,
+      ...patch,
+      quantity: patch.quantity != null ? Math.abs(patch.quantity) : existing.quantity,
+    };
+    return idb.put('stockMovements', updated);
+  }
+
+  async deleteStockMovement(id: string): Promise<void> {
+    const existing = await idb.get<StockMovement>('stockMovements', id);
+    if (!existing) return;
+    // Soft delete: stock recomputes ignoring it, audit trail survives.
+    await idb.put('stockMovements', { ...existing, deletedAt: new Date().toISOString() });
+  }
+
   /* ── Offline outbox ─────────────────────────────────────── */
   async getPendingCount(): Promise<number> {
-    const [txns, expenses] = await Promise.all([
+    const [txns, expenses, movements] = await Promise.all([
       idb.getAll<Transaction>('transactions'),
       idb.getAll<Expense>('expenses'),
+      idb.getAll<StockMovement>('stockMovements'),
     ]);
-    return txns.filter((t) => t.pending).length + expenses.filter((e) => e.pending).length;
+    return (
+      txns.filter((t) => t.pending).length +
+      expenses.filter((e) => e.pending).length +
+      movements.filter((m) => m.pending).length
+    );
   }
 
   async flushOutbox(): Promise<void> {
     if (!this.isOnline()) return;
-    const [txns, expenses] = await Promise.all([
+    const [txns, expenses, movements] = await Promise.all([
       idb.getAll<Transaction>('transactions'),
       idb.getAll<Expense>('expenses'),
+      idb.getAll<StockMovement>('stockMovements'),
     ]);
     await Promise.all([
       ...txns.filter((t) => t.pending).map((t) => idb.put('transactions', { ...t, pending: false })),
       ...expenses.filter((e) => e.pending).map((e) => idb.put('expenses', { ...e, pending: false })),
+      ...movements
+        .filter((m) => m.pending)
+        .map((m) => idb.put('stockMovements', { ...m, pending: false })),
     ]);
   }
 
@@ -319,14 +572,28 @@ export class LocalAdapter implements DataAdapter {
   }
 
   async exportAll(businessId: string): Promise<unknown> {
-    const [parties, transactions, expenses, reminders, business] = await Promise.all([
-      this.listParties(businessId),
-      this.listTransactions(businessId),
-      this.listExpenses(businessId),
-      this.listReminders(businessId),
-      idb.get<Business>('businesses', businessId),
-    ]);
-    return { exportedAt: new Date().toISOString(), business, parties, transactions, expenses, reminders };
+    const [parties, transactions, expenses, reminders, categories, products, stockMovements, business] =
+      await Promise.all([
+        this.listParties(businessId),
+        this.listTransactions(businessId),
+        this.listExpenses(businessId),
+        this.listReminders(businessId),
+        this.listProductCategories(businessId),
+        this.listProducts(businessId),
+        this.listStockMovements(businessId),
+        idb.get<Business>('businesses', businessId),
+      ]);
+    return {
+      exportedAt: new Date().toISOString(),
+      business,
+      parties,
+      transactions,
+      expenses,
+      reminders,
+      categories,
+      products,
+      stockMovements,
+    };
   }
 
   async clearAll(): Promise<void> {
