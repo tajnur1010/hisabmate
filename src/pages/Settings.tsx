@@ -10,6 +10,7 @@ import {
   Info,
   LogOut,
   Palette,
+  Smartphone,
   Sparkles,
   Store,
   Trash2,
@@ -39,7 +40,7 @@ export default function Settings() {
   const { mode, setMode } = useTheme();
   const { settings, update } = useSettings();
   const { business, adapterKind, updateBusiness, exportAll, loadSample, clearData } = useData();
-  const { signOut } = useAuth();
+  const { signOut, isGuest } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
 
@@ -131,6 +132,31 @@ export default function Settings() {
       <header>
         <h1 className="font-display text-2xl font-semibold text-ink">{t('settings.title')}</h1>
       </header>
+
+      {/* Guest notice. Someone using the app without an account deserves to be
+          told plainly where their ledger lives and what would lose it, rather
+          than discovering it after changing phones. */}
+      {isGuest && (
+        <Card spine="brand" className="space-y-2.5">
+          <div className="flex items-center gap-2.5">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand-strong">
+              <Smartphone size={16} />
+            </span>
+            <p className="text-sm font-semibold text-ink">{t('guest.title')}</p>
+          </div>
+          <p className="text-xs leading-relaxed text-muted">{t('guest.body')}</p>
+          <p className="text-xs leading-relaxed text-muted">{t('guest.upgradeHint')}</p>
+          <Button
+            size="sm"
+            variant="secondary"
+            leftIcon={<Download size={15} />}
+            onClick={onExport}
+            disabled={busy}
+          >
+            {t('guest.backup')}
+          </Button>
+        </Card>
+      )}
 
       {/* Business profile */}
       <Section title={t('settings.businessProfile')} icon={<Store size={15} />}>
@@ -277,7 +303,11 @@ export default function Settings() {
           <div className="flex items-center justify-between px-4 py-3 text-sm">
             <span className="text-muted">{t('settings.data')}</span>
             <span className="font-medium text-ink">
-              {adapterKind === 'supabase' ? 'Supabase (cloud)' : 'On-device (offline)'}
+              {adapterKind === 'supabase'
+                ? t('settings.storageCloud')
+                : isGuest
+                  ? t('settings.storageGuest')
+                  : t('settings.storageDevice')}
             </span>
           </div>
         </Card>
@@ -286,8 +316,15 @@ export default function Settings() {
       {/* Sign out + danger zone */}
       <div className="space-y-3">
         <Button variant="secondary" fullWidth leftIcon={<LogOut size={17} />} onClick={() => void signOut()}>
-          {t('settings.logout')}
+          {isGuest ? t('guest.exit') : t('settings.logout')}
         </Button>
+        {/* Leaving guest mode is not the same as losing the data, and the label
+            above shouldn't imply otherwise — spell it out. */}
+        {isGuest && (
+          <p className="px-1 text-center text-[11px] leading-tight text-faint">
+            {t('guest.exitHint')}
+          </p>
+        )}
         <button
           type="button"
           onClick={() => setConfirmClear(true)}
@@ -303,7 +340,11 @@ export default function Settings() {
         onConfirm={onClear}
         loading={clearing}
         title={t('settings.clearData')}
-        description={t('settings.clearDataConfirm')}
+        description={
+          isGuest
+            ? `${t('settings.clearDataConfirm')} ${t('guest.clearWarning')}`
+            : t('settings.clearDataConfirm')
+        }
         confirmLabel={t('common.delete')}
         icon={<Trash2 size={20} />}
       />

@@ -40,7 +40,12 @@ export type ExpenseCategory =
 
 export type DueStatus = 'good' | 'due_soon' | 'overdue';
 
-export type SyncState = 'synced' | 'syncing' | 'offline';
+/**
+ * Sync status shown in the top bar.
+ * `local` means this session has no server at all (guest / on-device mode), so
+ * there is nothing to upload — never claim "syncing" for it.
+ */
+export type SyncState = 'synced' | 'syncing' | 'offline' | 'local';
 
 export interface Profile {
   id: ID;

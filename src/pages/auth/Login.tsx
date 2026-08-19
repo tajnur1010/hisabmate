@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
+import { Eye, EyeOff, Lock, Mail, Smartphone } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useI18n } from '@/contexts/I18nContext';
 import { useToast } from '@/contexts/ToastContext';
 import { isMockBackend, env } from '@/lib/env';
 import type { TranslationKey } from '@/i18n/en';
+import { authErrorMessage } from '@/utils/authError';
 import { validateEmail, validatePassword } from '@/utils/validation';
 import { Button, Input } from '@/components/ui';
 import { CenteredScreen } from '@/components/layout/CenteredScreen';
@@ -16,7 +17,7 @@ import { GoogleGlyph } from '@/components/GoogleGlyph';
 
 export default function Login() {
   const { t } = useI18n();
-  const { signIn, signInWithGoogle } = useAuth();
+  const { signIn, signInWithGoogle, continueAsGuest, hasGuestData } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
 
@@ -42,7 +43,7 @@ export default function Login() {
     const res = await signIn(email.trim(), password);
     setSubmitting(false);
     if (!res.ok) {
-      toast.error(res.error ?? t('error.generic'));
+      toast.error(authErrorMessage(res.error, t));
       return;
     }
     navigate('/', { replace: true });
@@ -50,8 +51,14 @@ export default function Login() {
 
   async function onGoogle() {
     const res = await signInWithGoogle();
-    if (!res.ok) toast.error(res.error ?? t('error.generic'));
+    if (!res.ok) toast.error(authErrorMessage(res.error, t));
     else if (isMockBackend) navigate('/', { replace: true });
+  }
+
+  /** No account, no network — straight into the app with on-device storage. */
+  function onGuest() {
+    continueAsGuest();
+    navigate('/', { replace: true });
   }
 
   return (
@@ -112,18 +119,37 @@ export default function Login() {
         </Button>
       </form>
 
-      {env.enableGoogleAuth && (
-        <>
-          <div className="my-6 flex items-center gap-3 text-sm text-faint">
-            <span className="h-px flex-1 bg-line" />
-            {t('auth.or')}
-            <span className="h-px flex-1 bg-line" />
-          </div>
+      {/* Other ways in. One divider covers both, so the screen doesn't grow a
+          second "or" when Google sign-in is switched off. */}
+      <div className="my-6 flex items-center gap-3 text-sm text-faint">
+        <span className="h-px flex-1 bg-line" />
+        {t('auth.or')}
+        <span className="h-px flex-1 bg-line" />
+      </div>
+
+      <div className="space-y-3">
+        {env.enableGoogleAuth && (
           <Button variant="secondary" size="lg" fullWidth onClick={onGoogle} leftIcon={<GoogleGlyph />}>
             {t('auth.continueGoogle')}
           </Button>
-        </>
-      )}
+        )}
+
+        {/* The offline route: no sign-up, no server, works with no network at
+            all. Kept as prominent as the account options because for many shop
+            owners this is the only way in. */}
+        <Button
+          variant="soft"
+          size="lg"
+          fullWidth
+          onClick={onGuest}
+          leftIcon={<Smartphone size={18} />}
+        >
+          {hasGuestData ? t('auth.guestResume') : t('auth.guestStart')}
+        </Button>
+        <p className="px-1 text-center text-[11.5px] leading-tight text-faint">
+          {t('auth.guestHint')}
+        </p>
+      </div>
 
       {isMockBackend && (
         <p className="mt-6 rounded-2xl bg-brand-soft px-4 py-3 text-center text-sm text-brand-strong">

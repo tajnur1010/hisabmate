@@ -33,15 +33,14 @@ import type {
 /**
  * On-device backend backed by IndexedDB. This is a fully real, persistent
  * data store — everything the user enters is saved locally and survives
- * reloads and offline use. It also powers the offline outbox so entries made
- * while disconnected are flushed when connectivity returns.
+ * reloads, app restarts and total loss of connectivity.
+ *
+ * There is deliberately no outbox here: this adapter *is* the destination, not
+ * a staging area on the way to a server. So a row is never "pending upload",
+ * and the sync UI must not promise one (see `getPendingCount`).
  */
 export class LocalAdapter implements DataAdapter {
   readonly kind = 'mock' as const;
-
-  private isOnline(): boolean {
-    return typeof navigator === 'undefined' ? true : navigator.onLine;
-  }
 
   /* ── Profile & business ─────────────────────────────────── */
   async getProfile(userId: string): Promise<Profile | null> {
@@ -191,7 +190,8 @@ export class LocalAdapter implements DataAdapter {
       createdBy: userId,
       previousBalance,
       newBalance: previousBalance + delta,
-      pending: !this.isOnline(),
+      // Saved, not queued: this store is the final destination.
+      pending: false,
       clientId: input.clientId,
       deletedAt: null,
     };
@@ -247,7 +247,7 @@ export class LocalAdapter implements DataAdapter {
       createdAt: now,
       createdBy: userId,
       receiptUrl: input.receiptUrl ?? null,
-      pending: !this.isOnline(),
+      pending: false,
       clientId: input.clientId,
       deletedAt: null,
     };
@@ -503,7 +503,7 @@ export class LocalAdapter implements DataAdapter {
       occurredAt: input.occurredAt ?? now,
       createdAt: now,
       createdBy: userId,
-      pending: !this.isOnline(),
+      pending: false,
       clientId: input.clientId,
       deletedAt: null,
     };
@@ -532,21 +532,21 @@ export class LocalAdapter implements DataAdapter {
   }
 
   /* ── Offline outbox ─────────────────────────────────────── */
+  /**
+   * Always zero. Nothing written here is waiting to reach a server, so
+   * reporting a queue length would tell the user to expect an upload that is
+   * never going to happen.
+   */
   async getPendingCount(): Promise<number> {
-    const [txns, expenses, movements] = await Promise.all([
-      idb.getAll<Transaction>('transactions'),
-      idb.getAll<Expense>('expenses'),
-      idb.getAll<StockMovement>('stockMovements'),
-    ]);
-    return (
-      txns.filter((t) => t.pending).length +
-      expenses.filter((e) => e.pending).length +
-      movements.filter((m) => m.pending).length
-    );
+    return 0;
   }
 
+  /**
+   * Nothing to flush. Older builds of the app marked rows written while offline
+   * as `pending: true`; those flags are cleared here so an upgraded install
+   * doesn't carry a permanent "waiting to sync" state around.
+   */
   async flushOutbox(): Promise<void> {
-    if (!this.isOnline()) return;
     const [txns, expenses, movements] = await Promise.all([
       idb.getAll<Transaction>('transactions'),
       idb.getAll<Expense>('expenses'),

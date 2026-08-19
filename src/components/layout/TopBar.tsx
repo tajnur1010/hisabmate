@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Check, CloudOff, RefreshCw, Search, Settings } from 'lucide-react';
+import { Check, CloudOff, RefreshCw, Search, Settings, Smartphone } from 'lucide-react';
 import { useData } from '@/contexts/DataContext';
 import { useI18n } from '@/contexts/I18nContext';
 import { useSync } from '@/contexts/SyncContext';
@@ -11,6 +11,19 @@ import { cn } from '@/utils/cn';
 function SyncIndicator() {
   const { state, pending, flush } = useSync();
   const { t } = useI18n();
+
+  // On-device session: there is no server, so this only says where the data
+  // lives. Deliberately not a "synced" tick — nothing was uploaded.
+  if (state === 'local') {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-1 text-[11px] font-semibold text-muted"
+        title={t('sync.localHint')}
+      >
+        <Smartphone size={12} />
+      </span>
+    );
+  }
 
   if (state === 'synced') {
     return (

@@ -60,6 +60,12 @@ interface DataContextValue {
   /** A background reload is in flight. */
   loading: boolean;
   error: string | null;
+  /**
+   * The initial load failed, so `business` being null means "unknown", not
+   * "this shop owner has no shop yet". Route guards must not send someone to
+   * onboarding in this state — they'd create a second shop over the first.
+   */
+  loadFailed: boolean;
 
   business: Business | null;
   hasBusiness: boolean;
@@ -177,13 +183,16 @@ function normalizeProduct(input: Partial<CreateProductInput>): Partial<CreatePro
 }
 
 export function DataProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, adapterKind } = useAuth();
   const { settings } = useSettings();
-  const adapter = getAdapter();
+  // A guest session is served by the on-device store, an account session by the
+  // configured backend, so the adapter follows the session rather than the build.
+  const adapter = getAdapter(adapterKind);
 
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const [business, setBusiness] = useState<Business | null>(null);
   const [parties, setParties] = useState<Party[]>([]);
@@ -238,8 +247,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setBusiness(biz);
       if (biz) await loadData(biz.id);
       else resetCollections();
+      setLoadFailed(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data');
+      // Keep whatever was already on screen and record that this is a failure,
+      // not an empty account — the difference decides where routing sends the user.
+      setLoadFailed(true);
     } finally {
       setReady(true);
       setLoading(false);
@@ -252,12 +265,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setBusiness(null);
       resetCollections();
       setReady(false);
+      setLoadFailed(false);
+      setError(null);
       return;
     }
     void bootstrap();
   }, [user, bootstrap, resetCollections]);
 
-  // After the offline outbox flushes on reconnect, pull fresh data.
+  // Coming back online after a failed cloud load: retry once, automatically, so
+  // the user isn't left staring at the retry screen they didn't cause.
+  useEffect(() => {
+    if (!loadFailed || !user) return;
+    const onOnline = () => void bootstrap();
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [loadFailed, user, bootstrap]);
+
+  // A backend that queues writes announces `hisab:synced` once they land, so we
+  // reload. Neither current adapter queues anything (see SyncContext), so this
+  // is a hook for future backends rather than something that fires today.
   useEffect(() => {
     const onSynced = () => {
       const biz = businessRef.current;
@@ -624,6 +650,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       ready,
       loading,
       error,
+      loadFailed,
       business,
       hasBusiness: !!business,
       adapterKind: adapter.kind,
@@ -678,6 +705,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       ready,
       loading,
       error,
+      loadFailed,
       business,
       adapter.kind,
       parties,

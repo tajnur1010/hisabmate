@@ -7,6 +7,7 @@ import { useI18n } from '@/contexts/I18nContext';
 import { useToast } from '@/contexts/ToastContext';
 import { isMockBackend } from '@/lib/env';
 import type { TranslationKey } from '@/i18n/en';
+import { authErrorMessage } from '@/utils/authError';
 import { validateEmail } from '@/utils/validation';
 import { Button, Input } from '@/components/ui';
 import { CenteredScreen } from '@/components/layout/CenteredScreen';
@@ -43,7 +44,7 @@ export default function ForgotPassword() {
     const res = await resetPassword(email.trim());
     setSubmitting(false);
     if (!res.ok) {
-      toast.error(res.error && res.error !== 'offline' ? res.error : t('error.generic'));
+      toast.error(authErrorMessage(res.error, t));
       return;
     }
     // Don't reveal whether the address is registered — show the same confirmation either way.

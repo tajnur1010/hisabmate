@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useI18n } from '@/contexts/I18nContext';
 import { useToast } from '@/contexts/ToastContext';
 import type { TranslationKey } from '@/i18n/en';
+import { authErrorMessage } from '@/utils/authError';
 import { validatePassword } from '@/utils/validation';
 import { Button, Input } from '@/components/ui';
 import { CenteredScreen } from '@/components/layout/CenteredScreen';
@@ -47,7 +48,7 @@ export default function ResetPassword() {
     const res = await updatePassword(password);
     setSubmitting(false);
     if (!res.ok) {
-      toast.error(res.error && res.error !== 'offline' ? res.error : t('error.generic'));
+      toast.error(authErrorMessage(res.error, t));
       return;
     }
     toast.success(t('auth.passwordUpdated'));

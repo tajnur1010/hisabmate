@@ -9,6 +9,17 @@ dist-ssr
 *.local
 dev-dist
 
+# native app projects — generated from capacitor.config.ts by `npx cap add`,
+# so they are rebuilt on demand instead of being committed. Keeping them out
+# means no huge generated diffs and no stale native files.
+/android
+/ios
+.gradle
+*.apk
+*.aab
+*.keystore
+*.jks
+
 # env — never commit real keys
 .env
 .env.local

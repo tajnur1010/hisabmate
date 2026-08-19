@@ -1,0 +1,26 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="HisabMate">
+  <!--
+    Source art for every native app icon and splash screen.
+    @capacitor/assets composites this mark onto a solid background colour, so the
+    canvas here is deliberately TRANSPARENT: the launcher icon gets the jade
+    background, the splash screen gets the midnight one.
+    The mark is centred and kept inside ~78% of the canvas so Android's circular
+    and squircle masks never clip it.
+  -->
+  <defs>
+    <linearGradient id="coin" x1="732" y1="732" x2="940" y2="940" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F7CE62"/>
+      <stop offset="1" stop-color="#DFA636"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Coin-gold disc, tucked behind the ledger card -->
+  <circle cx="836" cy="836" r="104" fill="url(#coin)"/>
+
+  <!-- Ledger card + entry lines — the HisabMate glyph, centred on the canvas -->
+  <g transform="translate(-128,-128) scale(40)">
+    <path d="M7 8.5C7 7.67 7.67 7 8.5 7H23.5C24.33 7 25 7.67 25 8.5V25L21 22.5L18 25L15 22.5L12 25L9 22.5L7 24V8.5Z" fill="#FFFFFF"/>
+    <path d="M11.5 12.5H20.5" stroke="#0D9F6E" stroke-width="2.2" stroke-linecap="round"/>
+    <path d="M11.5 16.5H17" stroke="#0D9F6E" stroke-width="2.2" stroke-linecap="round"/>
+  </g>
+</svg>

@@ -1,0 +1,108 @@
+name: Android APK
+
+# Builds the installable HisabMate Android app in the cloud, so nothing has to
+# be installed on your own PC — no Android Studio, no JDK, no SDK.
+#
+# Run it from the GitHub website: Actions → "Android APK" → Run workflow.
+# When it finishes, the APK is at the bottom of the run page under "Artifacts".
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  apk:
+    name: Build debug APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      # The app must be built against the REAL Supabase project. If the secrets
+      # are missing we stop here instead of quietly shipping an APK full of
+      # in-browser demo data.
+      - name: Require Supabase credentials
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          missing=0
+          if [ -z "$SUPABASE_URL" ]; then
+            echo "::error::Secret VITE_SUPABASE_URL is missing."; missing=1
+          fi
+          if [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::error::Secret VITE_SUPABASE_ANON_KEY is missing."; missing=1
+          fi
+          if [ "$missing" = "1" ]; then
+            echo "Add them under Settings → Secrets and variables → Actions → New repository secret."
+            echo "Use the project URL and the public anon key only — never the service-role key."
+            exit 1
+          fi
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up the Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm install
+
+      # Same command you run on Windows, so a green build here means a green
+      # build there. The web bundle produced now is what gets packaged.
+      - name: Build the web bundle
+        env:
+          VITE_DATA_BACKEND: supabase
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_PUBLIC_URL: ${{ vars.VITE_PUBLIC_URL }}
+          VITE_DEFAULT_LANG: bn
+        run: npm run build
+
+      # The native android/ folder is generated, not committed, so it is created
+      # fresh on every run from capacitor.config.ts.
+      - name: Create the Android project
+        run: |
+          if [ ! -d android ]; then
+            npx cap add android
+          fi
+
+      # Launcher icons and the splash screen, drawn from assets/logo.svg. Not
+      # fatal: if rasterising ever fails the APK still builds, just with
+      # Capacitor's placeholder icon.
+      - name: Generate icons and splash screen
+        continue-on-error: true
+        run: >-
+          npx @capacitor/assets generate --android
+          --iconBackgroundColor '#0D9F6E'
+          --iconBackgroundColorDark '#0D9F6E'
+          --splashBackgroundColor '#0B1512'
+          --splashBackgroundColorDark '#0B1512'
+
+      - name: Copy the web bundle into the app
+        run: npx cap sync android
+
+      - name: Assemble the APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: hisabmate-android
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30

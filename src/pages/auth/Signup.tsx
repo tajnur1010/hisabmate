@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Lock, Mail, User } from 'lucide-react';
+import { Eye, EyeOff, Lock, Mail, Smartphone, User } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useI18n } from '@/contexts/I18nContext';
 import { useToast } from '@/contexts/ToastContext';
 import { isMockBackend } from '@/lib/env';
 import type { TranslationKey } from '@/i18n/en';
+import { authErrorMessage } from '@/utils/authError';
 import { validateEmail, validateName, validatePassword } from '@/utils/validation';
 import { Button, Input } from '@/components/ui';
 import { CenteredScreen } from '@/components/layout/CenteredScreen';
@@ -15,7 +16,7 @@ import { LedgerMark } from '@/components/Splash';
 
 export default function Signup() {
   const { t } = useI18n();
-  const { signUp } = useAuth();
+  const { signUp, continueAsGuest } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
 
@@ -47,7 +48,7 @@ export default function Signup() {
     const res = await signUp(email.trim(), password, fullName.trim());
     setSubmitting(false);
     if (!res.ok) {
-      toast.error(res.error ?? t('error.generic'));
+      toast.error(authErrorMessage(res.error, t));
       return;
     }
     if (res.needsConfirmation) {
@@ -129,6 +130,29 @@ export default function Signup() {
           {t('auth.signup')}
         </Button>
       </form>
+
+      {/* Signing up needs a working connection. Offer the offline route here
+          too, so a shop with no data left can still start keeping its khata. */}
+      <div className="my-6 flex items-center gap-3 text-sm text-faint">
+        <span className="h-px flex-1 bg-line" />
+        {t('auth.or')}
+        <span className="h-px flex-1 bg-line" />
+      </div>
+      <Button
+        variant="soft"
+        size="lg"
+        fullWidth
+        leftIcon={<Smartphone size={18} />}
+        onClick={() => {
+          continueAsGuest();
+          navigate('/', { replace: true });
+        }}
+      >
+        {t('auth.guestStart')}
+      </Button>
+      <p className="mt-2 px-1 text-center text-[11.5px] leading-tight text-faint">
+        {t('auth.guestHint')}
+      </p>
 
       {isMockBackend && (
         <p className="mt-6 rounded-2xl bg-brand-soft px-4 py-3 text-center text-sm text-brand-strong">

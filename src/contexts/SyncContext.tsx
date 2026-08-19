@@ -10,17 +10,23 @@ import {
 import type { ReactNode } from 'react';
 import type { SyncState } from '@/types';
 import { getAdapter } from '@/services';
+import { useAuth } from './AuthContext';
 
 interface SyncContextValue {
   /** Whether the browser currently reports a network connection. */
   online: boolean;
-  /** Number of writes queued locally, waiting to reach the server. */
+  /**
+   * Writes waiting to reach the server. Both adapters currently report 0: the
+   * on-device store *is* the destination, and Supabase writes are online and
+   * transactional. Kept in the contract because a future queued-write backend
+   * would surface here — never inflate it to imply a sync that isn't happening.
+   */
   pending: number;
-  /** True while the outbox is being flushed. */
+  /** True while a flush is in flight. */
   syncing: boolean;
   /** Coarse state for a single status pill. */
   state: SyncState;
-  /** Manually trigger an outbox flush (e.g. from a "retry" button). */
+  /** Ask the backend to push anything queued (no-op on both current adapters). */
   flush: () => Promise<void>;
   /** Re-read the pending count from the backend. */
   refreshPending: () => void;
@@ -31,7 +37,11 @@ const SyncContext = createContext<SyncContextValue | null>(null);
 const POLL_MS = 5000;
 
 export function SyncProvider({ children }: { children: ReactNode }) {
-  const adapter = getAdapter();
+  const { adapterKind } = useAuth();
+  const adapter = getAdapter(adapterKind);
+  // An on-device session has no server behind it. Nothing is ever queued for
+  // upload, so counting "pending" rows or promising a sync would be a lie.
+  const serverBacked = adapter.kind === 'supabase';
   const [online, setOnline] = useState(() =>
     typeof navigator === 'undefined' ? true : navigator.onLine,
   );
@@ -40,14 +50,18 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const syncingRef = useRef(false);
 
   const refreshPending = useCallback(() => {
+    if (!serverBacked) {
+      setPending(0);
+      return;
+    }
     void adapter
       .getPendingCount()
       .then(setPending)
       .catch(() => setPending(0));
-  }, [adapter]);
+  }, [adapter, serverBacked]);
 
   const flush = useCallback(async () => {
-    if (syncingRef.current) return;
+    if (syncingRef.current || !serverBacked) return;
     syncingRef.current = true;
     setSyncing(true);
     try {
@@ -59,7 +73,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       setSyncing(false);
       refreshPending();
     }
-  }, [adapter, refreshPending]);
+  }, [adapter, refreshPending, serverBacked]);
 
   // Track connectivity and flush the outbox as soon as we come back online.
   useEffect(() => {
@@ -76,8 +90,13 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     };
   }, [flush]);
 
-  // Keep the pending badge roughly in sync.
+  // Keep the pending badge roughly in sync. Skipped entirely for on-device
+  // sessions — there is no queue to poll.
   useEffect(() => {
+    if (!serverBacked) {
+      setPending(0);
+      return;
+    }
     refreshPending();
     const id = window.setInterval(refreshPending, POLL_MS);
     const onChanged = () => refreshPending();
@@ -86,9 +105,15 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       window.clearInterval(id);
       window.removeEventListener('hisab:datachanged', onChanged);
     };
-  }, [refreshPending]);
+  }, [refreshPending, serverBacked]);
 
-  const state: SyncState = !online ? 'offline' : syncing || pending > 0 ? 'syncing' : 'synced';
+  const state: SyncState = !serverBacked
+    ? 'local'
+    : !online
+      ? 'offline'
+      : syncing || pending > 0
+        ? 'syncing'
+        : 'synced';
 
   const value = useMemo<SyncContextValue>(
     () => ({ online, pending, syncing, state, flush, refreshPending }),

@@ -33,13 +33,20 @@ export function webRedirectUrl(path = '/'): string {
   return `${base}${path}`;
 }
 
-/** Match the native status bar to the theme the app is actually showing. */
+/**
+ * Match the native status bar to the theme the app is actually showing.
+ *
+ * The colours are the `--surface` token from src/index.css, because the status
+ * bar sits directly above the app's own header bar (`bg-surface/95`) — matching
+ * the header, not the page background, is what makes the two read as one
+ * surface instead of a stripe.
+ */
 export async function applyNativeTheme(resolved: 'light' | 'dark'): Promise<void> {
   if (!isNativeApp) return;
   try {
     // Style.Light = light background with dark icons, and vice versa.
     await StatusBar.setStyle({ style: resolved === 'dark' ? Style.Dark : Style.Light });
-    await StatusBar.setBackgroundColor({ color: resolved === 'dark' ? '#0B1512' : '#FFFFFF' });
+    await StatusBar.setBackgroundColor({ color: resolved === 'dark' ? '#111C19' : '#FFFFFF' });
   } catch {
     // Older devices can refuse to colour the status bar; the app is unaffected.
   }
