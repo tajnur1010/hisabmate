@@ -11,7 +11,6 @@ import {
   LogOut,
   Palette,
   Smartphone,
-  Sparkles,
   Store,
   Trash2,
 } from 'lucide-react';
@@ -39,7 +38,7 @@ export default function Settings() {
   const { t, lang, setLang } = useI18n();
   const { mode, setMode } = useTheme();
   const { settings, update } = useSettings();
-  const { business, adapterKind, updateBusiness, exportAll, loadSample, clearData } = useData();
+  const { business, adapterKind, updateBusiness, exportAll, clearData } = useData();
   const { signOut, isGuest } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
@@ -95,18 +94,6 @@ export default function Settings() {
       a.remove();
       URL.revokeObjectURL(url);
       toast.success(t('settings.exported'));
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('error.generic'));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function onLoadSample() {
-    setBusy(true);
-    try {
-      await loadSample();
-      toast.success(t('common.done'));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t('error.generic'));
     } finally {
@@ -269,14 +256,6 @@ export default function Settings() {
             onClick={onExport}
             disabled={busy}
           />
-          {adapterKind === 'mock' && (
-            <ActionRow
-              icon={<Sparkles size={18} />}
-              label={t('common.demoData')}
-              onClick={onLoadSample}
-              disabled={busy}
-            />
-          )}
         </Card>
       </Section>
 

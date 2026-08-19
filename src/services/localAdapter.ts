@@ -13,7 +13,6 @@ import type {
 import { uuid } from '@/utils/id';
 import { idb } from './db';
 import { computeBalance } from './ledger';
-import { buildSeed } from './seed';
 import type {
   CreateBusinessInput,
   CreateExpenseInput,
@@ -562,15 +561,6 @@ export class LocalAdapter implements DataAdapter {
   }
 
   /* ── Local utilities ────────────────────────────────────── */
-  async loadSample(businessId: string, userId: string): Promise<void> {
-    const { parties, transactions, expenses } = buildSeed(businessId, userId);
-    await Promise.all([
-      ...parties.map((p) => idb.put('parties', p)),
-      ...transactions.map((t) => idb.put('transactions', t)),
-      ...expenses.map((e) => idb.put('expenses', e)),
-    ]);
-  }
-
   async exportAll(businessId: string): Promise<unknown> {
     const [parties, transactions, expenses, reminders, categories, products, stockMovements, business] =
       await Promise.all([

@@ -13,7 +13,6 @@ import type {
 import { uuid } from '@/utils/id';
 import { requireSupabase } from '@/lib/supabase';
 import { computeBalance } from './ledger';
-import { buildSeed } from './seed';
 import type {
   CreateBusinessInput,
   CreateExpenseInput,
@@ -834,51 +833,5 @@ export class SupabaseAdapter implements DataAdapter {
   }
   async flushOutbox(): Promise<void> {
     /* no-op */
-  }
-
-  async loadSample(businessId: string, userId: string): Promise<void> {
-    const { parties, transactions, expenses } = buildSeed(businessId, userId);
-    await this.sb.from('parties').insert(
-      parties.map((p) => ({
-        id: p.id,
-        business_id: p.businessId,
-        type: p.type,
-        name: p.name,
-        phone: p.phone,
-        address: p.address,
-        opening_balance: p.openingBalance,
-        credit_limit: p.creditLimit,
-        due_date: p.dueDate,
-        notes: p.notes,
-      })),
-    );
-    await this.sb.from('transactions').insert(
-      transactions.map((t) => ({
-        id: t.id,
-        business_id: t.businessId,
-        party_id: t.partyId,
-        party_type: t.partyType,
-        type: t.type,
-        amount: t.amount,
-        note: t.note,
-        method: t.method,
-        occurred_at: t.occurredAt,
-        created_by: t.createdBy,
-        previous_balance: t.previousBalance,
-        new_balance: t.newBalance,
-      })),
-    );
-    await this.sb.from('expenses').insert(
-      expenses.map((e) => ({
-        id: e.id,
-        business_id: e.businessId,
-        amount: e.amount,
-        category: e.category,
-        note: e.note,
-        method: e.method,
-        occurred_at: e.occurredAt,
-        created_by: e.createdBy,
-      })),
-    );
   }
 }

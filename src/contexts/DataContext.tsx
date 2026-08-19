@@ -134,7 +134,6 @@ interface DataContextValue {
   ) => Promise<StockMovement>;
   deleteStockMovement: (id: string) => Promise<void>;
 
-  loadSample: () => Promise<void>;
   clearData: () => Promise<void>;
   exportAll: () => Promise<unknown>;
 }
@@ -544,14 +543,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [adapter, requireContext, loadData],
   );
 
-  /* ── Utilities (sample data / export / wipe) ──────────────────────────── */
-  const loadSample = useCallback(async () => {
-    const { userId, businessId } = requireContext();
-    if (!adapter.loadSample) throw new Error('Sample data is not available on this backend');
-    await adapter.loadSample(businessId, userId);
-    await loadData(businessId);
-  }, [adapter, requireContext, loadData]);
-
+  /* ── Utilities (export / wipe) ────────────────────────────────────────── */
   const clearData = useCallback(async () => {
     if (adapter.clearAll) await adapter.clearAll();
     setBusiness(null);
@@ -697,7 +689,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       createStockMovement,
       updateStockMovement,
       deleteStockMovement,
-      loadSample,
       clearData,
       exportAll,
     }),
@@ -751,7 +742,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       createStockMovement,
       updateStockMovement,
       deleteStockMovement,
-      loadSample,
       clearData,
       exportAll,
     ],

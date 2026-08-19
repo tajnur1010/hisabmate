@@ -206,7 +206,6 @@ export interface DataAdapter {
   flushOutbox(): Promise<void>;
 
   /* Local utilities (implemented by the on-device backend) */
-  loadSample?(businessId: string, userId: string): Promise<void>;
   exportAll?(businessId: string): Promise<unknown>;
   clearAll?(): Promise<void>;
 }
